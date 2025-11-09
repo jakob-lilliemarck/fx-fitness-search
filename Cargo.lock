@@ -529,6 +529,7 @@ dependencies = [
  "fx-mq-jobs",
  "num_cpus",
  "sqlx",
+ "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
