@@ -28,4 +28,5 @@ num_cpus = "1.17.0"
 futures = "0.3.31"
 clap = { version = "4.5", features = ["derive"] }
 thiserror = "2.0.12"
-
+const-fnv1a-hash = "1.1"
+dotenv = "0.15.0"

@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
-use fx_durable_ga_app::config::ClientConfig;
-use fx_durable_ga::models::{FitnessGoal, Mutagen, Schedule, Selector};
+use const_fnv1a_hash::fnv1a_hash_str_32;
+use fx_durable_ga::models::{Crossover, Distribution, FitnessGoal, Mutagen, Schedule, Selector};
+use fx_durable_ga_app::config::{App, ClientConfig};
 use sqlx::types::Uuid;
 
 // ============================================================
@@ -169,7 +170,7 @@ enum Command {
     RequestOptimization {
         /// The name of the evaluatbale feature configuration
         #[arg(long, required = true)]
-        name: String,
+        type_name: String,
 
         /// Valid arguments:
         /// - MIN(goal: f32)
@@ -209,32 +210,30 @@ enum Command {
         genotype_id: Uuid,
     },
 }
-
-fn main() -> anyhow::Result<()> {
-    // Initialize tracing subscriber
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_thread_ids(false)
-        .with_level(true)
-        .init();
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenv::from_filename("src/bin/.env.client").ok();
 
     let conf = ClientConfig::from_env()?;
 
-    // Parse command line arguments
+    let client = App::client(conf).await?;
+
     let args = Args::parse();
 
-    // Log the parsed command
-    match &args.command {
+    match args.command {
         Command::RequestOptimization {
-            name,
+            type_name,
             fitness_goal,
             schedule,
             selector,
             mutagen,
             initial_population,
         } => {
+            let type_hash: i32 = fnv1a_hash_str_32(&type_name) as i32;
+
             tracing::info!(
-                name = ?name,
+                type_name = ?type_name,
+                type_hash = type_hash,
                 fitness_goal = ?fitness_goal,
                 schedule = ?schedule,
                 selector = ?selector,
@@ -242,6 +241,20 @@ fn main() -> anyhow::Result<()> {
                 initial_population = ?initial_population,
                 "RequestOptimization command parsed"
             );
+
+            client
+                .get_svc()
+                .new_optimization_request(
+                    &type_name,
+                    type_hash,
+                    fitness_goal,
+                    schedule,
+                    selector,
+                    mutagen,
+                    Crossover::single_point(),
+                    Distribution::latin_hypercube(initial_population),
+                )
+                .await?;
         }
         Command::ListGenotypes { request_id } => {
             tracing::info!(
