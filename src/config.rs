@@ -2,6 +2,8 @@ use sqlx::{PgPool, types::Uuid};
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinSet;
 
+use crate::evaluators::feng::{self, FengEvaluator};
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("Missing environment variable \"{key}\"\n\tMessage: {message}")]
@@ -255,7 +257,13 @@ impl App {
         fx_durable_ga::run_migrations(&pool).await?;
 
         // Create the GA service and wrap it in an Arc
-        let svc = Arc::new(fx_durable_ga::bootstrap(pool.clone()).await?.build());
+        let svc = Arc::new(
+            fx_durable_ga::bootstrap(pool.clone())
+                .await?
+                .register::<feng::Config, _>(FengEvaluator)
+                .await?
+                .build(),
+        );
 
         Ok(Self {
             pool,

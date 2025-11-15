@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
 use const_fnv1a_hash::fnv1a_hash_str_32;
+use fx_durable_ga::GenotypesFilter;
 use fx_durable_ga::models::{Crossover, Distribution, FitnessGoal, Mutagen, Schedule, Selector};
 use fx_durable_ga_app::config::{App, ClientConfig};
+use fx_durable_ga_app::evaluators::FengConfig;
 use sqlx::types::Uuid;
 
 // ============================================================
@@ -257,16 +259,31 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
         }
         Command::ListGenotypes { request_id } => {
-            tracing::info!(
-                request_id = ?request_id,
-                "ListGenotypes command parsed"
-            );
+            let filter = GenotypesFilter::default()
+                .with_request_id(request_id)
+                .with_fitness(true)
+                .with_order_fitness_asc();
+
+            let genotypes = client.get_svc().search_genotypes(&filter, 100).await?;
+
+            println!("\nGenotypes for request {}:\n", request_id);
+            println!("{:<38} {:<15}", "Genotype ID", "Fitness");
+            println!("{}", "-".repeat(55));
+
+            for (genotype, fitness) in genotypes {
+                if let Some(fitness) = fitness {
+                    println!("{:<38} {:<15.6}", genotype.id(), fitness);
+                }
+            }
         }
         Command::GetPhenotype { genotype_id } => {
-            tracing::info!(
-                genotype_id = ?genotype_id,
-                "GetPhenotype command parsed"
-            );
+            let phenotype = client
+                .get_svc()
+                .get_phenotype::<FengConfig>(&genotype_id)
+                .await?;
+            let json = serde_json::to_value(&phenotype)?;
+            println!("\nPhenotype for genotype {}:\n", genotype_id);
+            println!("{}", serde_json::to_string_pretty(&json)?);
         }
     }
 

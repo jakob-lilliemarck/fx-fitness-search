@@ -504,9 +504,9 @@ dependencies = [
 
 [[package]]
 name = "fx-durable-ga"
-version = "0.1.8"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7238eb1e61e7757289eed17aedeba475235c64c959ccb13799c0d445ba592555"
+checksum = "4593d52c23baa8d042075067120c4b6fa51ef58178c8b439fc2de514d7be8ce1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -536,12 +536,15 @@ dependencies = [
  "fx-event-bus",
  "fx-mq-jobs",
  "num_cpus",
+ "serde",
+ "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
