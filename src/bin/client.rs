@@ -3,7 +3,7 @@ use const_fnv1a_hash::fnv1a_hash_str_32;
 use fx_durable_ga::GenotypesFilter;
 use fx_durable_ga::models::{Crossover, Distribution, FitnessGoal, Mutagen, Schedule, Selector};
 use fx_durable_ga_app::config::{App, ClientConfig};
-use fx_durable_ga_app::evaluators::FengConfig;
+use fx_durable_ga_app::optimizations::FengConfig;
 use sqlx::types::Uuid;
 
 // ============================================================
