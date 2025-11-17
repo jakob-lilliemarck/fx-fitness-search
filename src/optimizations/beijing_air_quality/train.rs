@@ -12,7 +12,7 @@ use burn::prelude::*;
 use burn::record::CompactRecorder;
 use burn::tensor::backend::AutodiffBackend;
 
-pub fn train<B, M>(
+pub async fn train<B, M>(
     device: &B::Device,
     dataset_training: &SequenceDataset,
     dataset_validation: &SequenceDataset,
@@ -28,6 +28,9 @@ where
     M: SequenceModel<B> + AutodiffModule<B>,
     M::InnerModule: SequenceModel<B::InnerBackend>,
 {
+    // Yield to the runtime
+    tokio::task::yield_now().await;
+
     // Initialize optimizer
     let mut optimizer = AdamConfig::new()
         .with_weight_decay(Some(WeightDecayConfig::new(5e-4)))
@@ -92,6 +95,9 @@ where
 
             total_train_loss += loss_value;
             num_train_batches += 1;
+
+            // Yield to the runtime
+            tokio::task::yield_now().await;
         }
 
         let avg_train_loss = if num_train_batches > 0 {
@@ -127,6 +133,9 @@ where
 
             total_valid_loss += loss_value;
             num_valid_batches += 1;
+
+            // Yield to the runtime
+            tokio::task::yield_now().await;
         }
 
         let avg_valid_loss = if num_valid_batches > 0 {
@@ -142,23 +151,25 @@ where
         } else {
             epochs_without_improvement += 1;
             if epochs_without_improvement >= patience {
-                println!(
-                    "Early stopping at epoch {} - Best validation loss: {:.6}",
-                    epoch + 1,
-                    best_valid_loss
+                tracing::info!(
+                    epoch = epoch + 1,
+                    best_valid_loss = best_valid_loss,
+                    "Early stopping triggered",
                 );
                 break;
             }
         }
 
-        println!(
-            "Epoch {}/{} - Train Loss: {:.6}, Valid Loss: {:.6} (Best: {:.6})",
-            epoch + 1,
-            epochs,
-            avg_train_loss,
-            avg_valid_loss,
-            best_valid_loss
+        tracing::info!(
+            epoch = epoch + 1,
+            total_epochs = epochs,
+            train_loss = avg_train_loss,
+            valid_loss = avg_valid_loss,
+            best_valid_loss = best_valid_loss,
+            "Epoch completed",
         );
+        // Yield to the runtime
+        tokio::task::yield_now().await;
     }
 
     // Save the trained model and config if a path was provided

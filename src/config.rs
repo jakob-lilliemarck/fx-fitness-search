@@ -1,6 +1,8 @@
+use sqlx::database;
 use sqlx::{PgPool, types::Uuid};
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinSet;
+use tracing::instrument;
 
 use crate::optimizations::beijing_air_quality::{BeijingEvaluator, BeijingPhenotype};
 use crate::optimizations::feng::{self, FengEvaluator};
@@ -27,6 +29,7 @@ pub trait Var {
 pub struct DatabaseUrl;
 pub struct HostId;
 pub struct LeaseSeconds;
+pub struct ShutdownTimeoutSeconds;
 
 impl Var for DatabaseUrl {
     const NAME: &'static str = "DATABASE_URL";
@@ -82,15 +85,39 @@ impl Var for LeaseSeconds {
     }
 }
 
-#[derive(Clone)]
+impl Var for ShutdownTimeoutSeconds {
+    const NAME: &str = "SHUTDOWN_TIMEOUT_SECONDS";
+    type Type = Duration;
+
+    fn from_env() -> Result<Self::Type, ConfigError> {
+        let shutdown_timeout_str =
+            std::env::var(Self::NAME).map_err(|err| ConfigError::Missing {
+                key: Self::NAME.to_string(),
+                message: err.to_string(),
+            })?;
+
+        let shutdown_timeout =
+            shutdown_timeout_str
+                .parse::<u64>()
+                .map_err(|err| ConfigError::Invalid {
+                    key: Self::NAME.to_string(),
+                    value: shutdown_timeout_str,
+                    message: err.to_string(),
+                })?;
+        Ok(Duration::from_secs(shutdown_timeout))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub database_url: String,
     pub host_id: Uuid,
     pub lease_seconds: Duration,
+    pub shutdown_timeout_seconds: Duration,
     pub workers: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ClientConfig {
     pub database_url: String,
 }
@@ -103,6 +130,8 @@ impl ServerConfig {
 
         let lease_seconds = LeaseSeconds::from_env()?;
 
+        let shutdown_timeout_seconds = ShutdownTimeoutSeconds::from_env()?;
+
         // Get the number of physical cores on the current machine.
         // At the time of writing this I know that my current training with NdArray runs on 2 cores.
         // As such we divide by two and round down, to get the numbers of worker to run.
@@ -111,10 +140,20 @@ impl ServerConfig {
         let physical_cores = num_cpus::get_physical();
         let workers = physical_cores / 2;
 
+        tracing::info!(
+            message = "Configuration loaded",
+            database_url = database_url,
+            host_id = host_id.to_string(),
+            lease_seconds = lease_seconds.as_secs(),
+            shutdown_timeout_seconds = shutdown_timeout_seconds.as_secs(),
+            workers = workers
+        );
+
         Ok(ServerConfig {
             database_url,
             host_id,
             lease_seconds,
+            shutdown_timeout_seconds,
             workers,
         })
     }
@@ -124,10 +163,16 @@ impl ClientConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         let database_url = DatabaseUrl::from_env()?;
 
+        tracing::info!(
+            message = "Configuration loaded",
+            database_url = database_url,
+        );
+
         Ok(ClientConfig { database_url })
     }
 }
 
+#[derive(Debug)]
 pub enum Conf {
     Client(ClientConfig),
     Server(ServerConfig),
@@ -142,6 +187,7 @@ impl Tasks {
     pub fn start(
         mut event_listener: fx_event_bus::Listener,
         mut jobs_listener: fx_mq_jobs::Listener,
+        shutdown_timeout: Duration,
     ) -> Self {
         let mut set = JoinSet::new();
         let cancel = tokio_util::sync::CancellationToken::new();
@@ -163,7 +209,7 @@ impl Tasks {
                 res = jobs_listener.listen() => res.map_err(|e| anyhow::anyhow!(e)),
                 _ = cancel_jobs.cancelled() => {
                     tracing::info!("Job listener received shutdown signal");
-                    jobs_listener.stop(Duration::from_secs(10)).await.map_err(|e| anyhow::anyhow!(e))
+                    jobs_listener.stop(shutdown_timeout).await.map_err(|e| anyhow::anyhow!(e))
                 }
             }
         });
@@ -225,7 +271,11 @@ impl App {
         )
         .await?;
 
-        app.tasks = Some(Tasks::start(event_listener, jobs_listener));
+        app.tasks = Some(Tasks::start(
+            event_listener,
+            jobs_listener,
+            conf.shutdown_timeout_seconds,
+        ));
 
         Ok(app)
     }
@@ -235,12 +285,6 @@ impl App {
     }
 
     async fn new(conf: Conf) -> anyhow::Result<Self> {
-        tracing_subscriber::fmt()
-            .pretty()
-            .with_thread_ids(true)
-            .with_max_level(tracing::Level::INFO)
-            .init();
-
         let database_url = match &conf {
             Conf::Client(ClientConfig { database_url }) => database_url,
             Conf::Server(ServerConfig { database_url, .. }) => database_url,
@@ -253,9 +297,7 @@ impl App {
             .await?;
 
         // Run required migrations migrations
-        fx_event_bus::run_migrations(&pool).await?;
-        fx_mq_jobs::run_migrations(&pool, fx_mq_jobs::FX_MQ_JOBS_SCHEMA_NAME).await?;
-        fx_durable_ga::migrations::run_migrations(&pool).await?;
+        fx_durable_ga::migrations::run_default_migrations(&pool).await?;
 
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(

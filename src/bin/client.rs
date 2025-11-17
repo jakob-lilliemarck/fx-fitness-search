@@ -4,6 +4,7 @@ use fx_durable_ga::GenotypesFilter;
 use fx_durable_ga::models::{Crossover, Distribution, FitnessGoal, Mutagen, Schedule, Selector};
 use fx_durable_ga_app::config::{App, ClientConfig};
 use fx_durable_ga_app::optimizations::FengConfig;
+use fx_durable_ga_app::optimizations::beijing_air_quality::commands::BeijingCommand;
 use sqlx::types::Uuid;
 
 // ============================================================
@@ -211,10 +212,21 @@ enum Command {
         #[arg(long, required = true)]
         genotype_id: Uuid,
     },
+    /// Beijing air quality domain-specific operations
+    #[command(subcommand)]
+    Beijing(BeijingCommand),
 }
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv::from_filename("src/bin/.env.client").ok();
+    dotenv::from_filename(".env.shared").ok();
+    dotenv::from_filename(".env.client").ok();
+
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_thread_ids(true)
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     let conf = ClientConfig::from_env()?;
 
@@ -223,6 +235,9 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     match args.command {
+        Command::Beijing(cmd) => {
+            cmd.execute(client.get_svc()).await?;
+        }
         Command::RequestOptimization {
             type_name,
             fitness_goal,
