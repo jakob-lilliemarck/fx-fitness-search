@@ -8,7 +8,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .pretty()
         .with_thread_ids(true)
-        .with_max_level(tracing::Level::WARN)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
     let conf = ServerConfig::from_env()?;

@@ -63,7 +63,7 @@ The server will start workers that process optimization jobs.
 **Quick Test (Small Scale):**
 ```bash
 cargo run --release --bin client -- beijing request-optimization \
-  --fitness-goal 'MIN(15.0)' \
+  --fitness-goal 'MIN(0.0)' \
   --schedule 'GENERATIONAL(5,20)' \
   --selector 'TOURNAMENT(3,5)' \
   --mutagen 'MUTAGEN(1.0,0.15)' \

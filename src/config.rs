@@ -30,6 +30,7 @@ pub struct DatabaseUrl;
 pub struct HostId;
 pub struct LeaseSeconds;
 pub struct ShutdownTimeoutSeconds;
+pub struct ModelSavePath;
 
 impl Var for DatabaseUrl {
     const NAME: &'static str = "DATABASE_URL";
@@ -108,12 +109,26 @@ impl Var for ShutdownTimeoutSeconds {
     }
 }
 
+impl Var for ModelSavePath {
+    const NAME: &str = "MODEL_SAVE_PATH";
+    type Type = String;
+
+    fn from_env() -> Result<Self::Type, ConfigError> {
+        let path = std::env::var(Self::NAME).map_err(|err| ConfigError::Missing {
+            key: Self::NAME.to_string(),
+            message: err.to_string(),
+        })?;
+        Ok(path)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub database_url: String,
     pub host_id: Uuid,
     pub lease_seconds: Duration,
     pub shutdown_timeout_seconds: Duration,
+    pub model_save_path: String,
     pub workers: usize,
 }
 
@@ -132,6 +147,8 @@ impl ServerConfig {
 
         let shutdown_timeout_seconds = ShutdownTimeoutSeconds::from_env()?;
 
+        let model_save_path = ModelSavePath::from_env()?;
+
         // Get the number of physical cores on the current machine.
         // At the time of writing this I know that my current training with NdArray runs on 2 cores.
         // As such we divide by two and round down, to get the numbers of worker to run.
@@ -141,11 +158,11 @@ impl ServerConfig {
         let workers = physical_cores / 2;
 
         tracing::info!(
-            message = "Configuration loaded",
-            database_url = database_url,
-            host_id = host_id.to_string(),
+            message = "Server configuration loaded",
+            host_id = %host_id,
             lease_seconds = lease_seconds.as_secs(),
             shutdown_timeout_seconds = shutdown_timeout_seconds.as_secs(),
+            model_save_path = %model_save_path,
             workers = workers
         );
 
@@ -154,6 +171,7 @@ impl ServerConfig {
             host_id,
             lease_seconds,
             shutdown_timeout_seconds,
+            model_save_path,
             workers,
         })
     }
