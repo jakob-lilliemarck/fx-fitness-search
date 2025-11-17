@@ -1,11 +1,17 @@
 pub mod commands;
+pub mod evaluator;
+pub mod ingestion;
+pub mod phenotype;
 
-mod batcher;
-mod dataset;
-mod infer_dataset;
-mod inference;
-mod model;
-mod parser;
-mod preprocessor;
-mod train;
-mod train_config;
+pub(crate) mod batcher;
+pub(crate) mod dataset;
+pub(crate) mod infer_dataset;
+pub(crate) mod inference;
+pub(crate) mod model;
+pub(crate) mod parser;
+pub(crate) mod preprocessor;
+pub(crate) mod train;
+pub(crate) mod train_config;
+
+pub use evaluator::BeijingEvaluator;
+pub use phenotype::BeijingPhenotype;

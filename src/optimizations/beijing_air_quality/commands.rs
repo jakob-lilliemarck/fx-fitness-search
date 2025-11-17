@@ -233,7 +233,8 @@ fn main() -> anyhow::Result<()> {
                     path
                 );
 
-                let dataset_builder = dataset::build_dataset_from_file(path, &features, &targets)?;
+                let dataset_builder =
+                    super::dataset::build_dataset_from_file(path, &features, &targets)?;
                 let (train, opt_valid) =
                     dataset_builder.build(sequence_length, prediction_horizon, Some(0.8))?;
                 let valid = opt_valid.expect("must get a validation dataset during training");
@@ -264,8 +265,8 @@ fn main() -> anyhow::Result<()> {
             );
 
             // Create combined datasets
-            let dataset_training = dataset::SequenceDataset::from_items(all_train_items);
-            let dataset_validation = dataset::SequenceDataset::from_items(all_valid_items);
+            let dataset_training = super::dataset::SequenceDataset::from_items(all_train_items);
+            let dataset_validation = super::dataset::SequenceDataset::from_items(all_valid_items);
 
             // Choose model architecture:
             let model = FeedForward::<Backend>::new(
@@ -302,7 +303,7 @@ fn main() -> anyhow::Result<()> {
                     })
                     .collect();
 
-                Some(train_config::TrainConfig {
+                Some(super::train_config::TrainConfig {
                     hidden_size,
                     input_size: feature_length,
                     output_size: target_length,
@@ -316,7 +317,7 @@ fn main() -> anyhow::Result<()> {
             };
 
             // Train
-            let (_model, validation_loss) = train::train(
+            let (_model, validation_loss) = super::train::train(
                 &device,
                 &dataset_training,
                 &dataset_validation,
@@ -337,23 +338,24 @@ fn main() -> anyhow::Result<()> {
 
         Command::Export { features, output } => {
             // For export, use features as both features and targets from first station
-            let dataset_builder = dataset::build_dataset_from_file(PATHS[0], &features, &features)?;
+            let dataset_builder =
+                super::dataset::build_dataset_from_file(PATHS[0], &features, &features)?;
             dataset_builder.to_csv(&output)?;
             tracing::info!("Preprocessed dataset exported to: {}", output);
         }
 
         Command::Infer { model_path, limit } => {
-            let engine = inference::InferenceEngine::<Backend>::load(&model_path, &device)?;
+            let engine = super::inference::InferenceEngine::<Backend>::load(&model_path, &device)?;
             println!("Running inference...");
-            let results = infer_dataset::run_inference(&engine, WANSHOUXIGONG_PATH, limit)?;
+            let results = super::infer_dataset::run_inference(&engine, WANSHOUXIGONG_PATH, limit)?;
 
             // Write results to CSV
             let csv_path = format!("{}.infer.csv", model_path);
-            infer_dataset::write_results_to_csv(&results, &csv_path)?;
+            super::infer_dataset::write_results_to_csv(&results, &csv_path)?;
             println!("Results written to: {}", csv_path);
 
             // Calculate and display metrics
-            let metrics = infer_dataset::calculate_metrics(&results);
+            let metrics = super::infer_dataset::calculate_metrics(&results);
             println!("\n=== Inference Summary ===");
             println!("{}", metrics);
         }

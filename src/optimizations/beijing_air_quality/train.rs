@@ -180,10 +180,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::super::dataset::DatasetBuilder;
+    use super::super::model::SimpleLstm;
+    use super::super::preprocessor::Pipeline;
     use super::*;
-    use crate::dataset::DatasetBuilder;
-    use crate::model::SimpleLstm;
-    use crate::preprocessor::Pipeline;
     use burn::backend::ndarray::NdArrayDevice;
     use burn::backend::{Autodiff, NdArray};
     use std::collections::HashMap;

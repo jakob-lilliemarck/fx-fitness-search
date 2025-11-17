@@ -419,8 +419,8 @@ impl Dataset<SequenceDatasetItem> for SequenceDataset {
 
 #[cfg(test)]
 mod tests {
+    use super::super::preprocessor::Pipeline;
     use super::*;
-    use crate::preprocessor::Pipeline;
 
     /// Helper to build a simple dataset with integers for easy visual verification.
     /// Features: [[1], [2], [3], ..., [num_timesteps]]

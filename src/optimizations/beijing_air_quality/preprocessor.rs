@@ -144,7 +144,7 @@ pub struct ZScore {
 }
 
 impl ZScore {
-    fn new(window: usize) -> Self {
+    pub fn new(window: usize) -> Self {
         Self {
             window,
             values: VecDeque::with_capacity(window),
