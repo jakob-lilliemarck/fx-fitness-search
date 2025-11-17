@@ -8,6 +8,23 @@ This project is building a library to train neural network models on timeseries 
 
 Each domain will integrate with `fx-durable-ga` for distributed genetic algorithm optimization.
 
+### Key Technical Constraints
+
+1. **Data Paths**: All file paths must be relative to project root. Data files live in `src/optimizations/beijing_air_quality/data/` but are referenced as `src/optimizations/beijing_air_quality/data/PRSA_Data_*.csv` from the project root.
+
+2. **Source Columns**: Only columns with valid f32 conversions can be used as source columns. From the CSV header `No,year,month,day,hour,PM2.5,PM10,SO2,NO2,CO,O3,TEMP,PRES,DEWP,RAIN,wd,WSPM,station`, we exclude:
+   - `No` (u32 row identifier, not a feature)
+   - `year` (not currently used)
+   - `station` (enum Station, no f32 conversion yet)
+   
+   This leaves **15 valid source columns**: `month`, `day`, `hour`, `PM2.5`, `PM10`, `SO2`, `NO2`, `CO`, `O3`, `TEMP`, `PRES`, `DEWP`, `RAIN`, `wd` (WindDirection has f32 conversion via degrees), `WSPM`.
+
+3. **Pipeline Output**: All preprocessing pipelines output exactly one f32 value per feature. Each `Pipeline::process()` call returns `Option<f32>`, never a vector.
+
+4. **Type Safety**: The `train::train()` function returns `f32` for loss, but the GA system expects `f64` for fitness. We cast f32→f64 which is safe and lossless.
+
+5. **Dataset Combining**: The `SequenceDataset::from_items(Vec<(Metadata, SequenceDatasetItem)>)` method exists for combining datasets from multiple files (verified in dataset.rs line 397).
+
 ## Current State
 
 ### Working Code
@@ -45,15 +62,17 @@ The beijing_air_quality code needs to be integrated with fx-durable-ga so it can
 **Implementation Strategy**: Mirror `feng::Config` exactly to start.
 
 **Optimizable Parameters** (31 genes total):
-- **7 features** (28 genes): Each feature has:
-  - Source column index (0-14) from VALID_COLUMNS (15 columns total)
-  - Pipeline length (0-2)
-  - Transform 1 (0-11): ZScore, ROC, Std with various windows
-  - Transform 2 (0-11): Same as above
-- **3 hyperparameters** (3 genes):
-  - Hidden size: [4, 8, 16, 32, 64, 128]
-  - Learning rate: [1e-4, 5e-4, 1e-3]
-  - Sequence length: [10, 20, 30, ..., 100] (step 10)
+- **7 features** (28 genes = 7 features × 4 genes each): Each feature has:
+  - Source column gene (1 gene): Stores index (0-14) into the 15 valid f32-convertible columns
+  - Pipeline length gene (1 gene): Stores value (0-2) indicating how many transforms to apply
+  - Transform 1 gene (1 gene): Stores index (0-11) selecting one of 12 transform variants
+  - Transform 2 gene (1 gene): Stores index (0-11) selecting one of 12 transform variants
+- **3 hyperparameters** (3 genes = 3 individual genes):
+  - Hidden size gene (1 gene): Stores index (0-5) mapping to [4, 8, 16, 32, 64, 128]
+  - Learning rate gene (1 gene): Stores index (0-2) mapping to [1e-4, 5e-4, 1e-3]
+  - Sequence length gene (1 gene): Stores index (0-9) mapping to [10, 20, 30, ..., 100]
+
+**Note**: Each hyperparameter uses ONE gene that stores an index. During decode, the index maps to the actual value (e.g., hidden_size gene=2 → actual hidden_size=16).
 
 **Fixed Parameters** (not optimized):
 - Target: Always TEMP (user specifies target)
@@ -111,27 +130,49 @@ The beijing_air_quality code needs to be integrated with fx-durable-ga so it can
     ```
 - Implement `fx_durable_ga::models::Encodeable` trait
   - `NAME`: "beijing_air_quality_feature_engineering"
-  - `morphology()`: Define gene bounds
+  - Define constants for gene bounds (at module level for clarity):
+    ```rust
+    const FEATURE_COUNT: usize = 7;
+    const SOURCE_COLUMN_COUNT: usize = 15;  // Length of SOURCE_COLUMNS
+    const MAX_PIPELINE_LENGTH: usize = 2;   // Max transforms per feature
+    const TRANSFORM_COUNT: usize = 12;      // Number of Transform enum variants
+    
+    const HIDDEN_SIZE_OPTIONS: &[usize] = &[4, 8, 16, 32, 64, 128];
+    const LEARNING_RATE_OPTIONS: &[f64] = &[1e-4, 5e-4, 1e-3];
+    const SEQUENCE_LENGTH_OPTIONS: &[usize] = &[10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+    ```
+  - `morphology()`: Define gene bounds using named constants
     ```rust
     fn morphology() -> Vec<GeneBounds> {
         let mut bounds = Vec::new();
+        
         // 7 features, each with 4 genes
-        for _ in 0..7 {
-            bounds.push(GeneBounds::integer(0, 14, 15).unwrap()); // source (15 columns)
-            bounds.push(GeneBounds::integer(0, 2, 3).unwrap());   // pipeline_length
-            bounds.push(GeneBounds::integer(0, 11, 12).unwrap()); // transform_1
-            bounds.push(GeneBounds::integer(0, 11, 12).unwrap()); // transform_2
+        for _ in 0..FEATURE_COUNT {
+            // Source column index (0 to SOURCE_COLUMN_COUNT-1)
+            bounds.push(GeneBounds::integer(0, SOURCE_COLUMN_COUNT as i64 - 1, SOURCE_COLUMN_COUNT as i64).unwrap());
+            
+            // Pipeline length (0, 1, or 2 transforms)
+            bounds.push(GeneBounds::integer(0, MAX_PIPELINE_LENGTH as i64, MAX_PIPELINE_LENGTH as i64 + 1).unwrap());
+            
+            // Transform 1 index (0 to TRANSFORM_COUNT-1)
+            bounds.push(GeneBounds::integer(0, TRANSFORM_COUNT as i64 - 1, TRANSFORM_COUNT as i64).unwrap());
+            
+            // Transform 2 index (0 to TRANSFORM_COUNT-1)
+            bounds.push(GeneBounds::integer(0, TRANSFORM_COUNT as i64 - 1, TRANSFORM_COUNT as i64).unwrap());
         }
-        // Hyperparameters
-        bounds.push(GeneBounds::integer(0, 5, 6).unwrap());   // hidden_size
-        bounds.push(GeneBounds::integer(0, 2, 3).unwrap());   // learning_rate
-        bounds.push(GeneBounds::integer(0, 9, 10).unwrap());  // sequence_length
+        
+        // Hyperparameters - each stores an index into the options array
+        bounds.push(GeneBounds::integer(0, HIDDEN_SIZE_OPTIONS.len() as i64 - 1, HIDDEN_SIZE_OPTIONS.len() as i64).unwrap());
+        bounds.push(GeneBounds::integer(0, LEARNING_RATE_OPTIONS.len() as i64 - 1, LEARNING_RATE_OPTIONS.len() as i64).unwrap());
+        bounds.push(GeneBounds::integer(0, SEQUENCE_LENGTH_OPTIONS.len() as i64 - 1, SEQUENCE_LENGTH_OPTIONS.len() as i64).unwrap());
+        
         bounds
     }
     ```
-  - `encode()`: Phenotype → genes
-  - `decode()`: genes → Phenotype
+  - `encode()`: Phenotype → genes (use constants for indexing, e.g., `HIDDEN_SIZE_OPTIONS.iter().position(...)`)
+  - `decode()`: genes → Phenotype (use constants for lookups, e.g., `HIDDEN_SIZE_OPTIONS[gene as usize]`)
 - Import `SOURCE_COLUMNS` from ingestion module: `use super::ingestion::SOURCE_COLUMNS;`
+- Note: Each gene for source column (0-14) maps to the 15 f32-convertible columns defined in SOURCE_COLUMNS
 
 ### 1.2 Create Evaluator
 
@@ -194,14 +235,14 @@ The beijing_air_quality code needs to be integrated with fx-durable-ga so it can
      - `sequence_length` from phenotype
      - `prediction_horizon = 1` (hardcoded - predict 1 timestep ahead)
      - `0.8` split ratio (80% train, 20% validation)
-   - Combine all stations into unified datasets using `SequenceDataset::from_items()`
+   - Combine all stations into unified datasets using `SequenceDataset::from_items(Vec<(Metadata, SequenceDatasetItem)>)` (method exists in dataset.rs line 397)
 
 4. Create FeedForward model:
    - input_size = 11 (4 time features + 7 optimized features)
    - hidden_size from phenotype
    - output_size = 1 (single target)
    - sequence_length from phenotype
-   - Note: Each feature pipeline outputs a single f32 value
+   - Note: Each feature pipeline outputs exactly one f32 value (verified in preprocessor.rs - all `process()` methods return `Option<f32>`)
 
 5. Train using `train::train()`:
    - batch_size: 100 (fixed)
@@ -214,7 +255,7 @@ The beijing_air_quality code needs to be integrated with fx-durable-ga so it can
    ```rust
    // train() returns (model, f32)
    let (_model, best_valid_loss) = train::train(...);
-   Ok(best_valid_loss as f64)  // TODO: Cast f32 to f64 for database - align types later
+   Ok(best_valid_loss as f64)  // Cast f32 to f64 - safe and lossless conversion
    ```
 
 **Notes**:
@@ -232,12 +273,14 @@ The beijing_air_quality code needs to be integrated with fx-durable-ga so it can
 **Contents**:
 ```rust
 // Valid source columns from Beijing air quality CSV files
-// These correspond to the CSV header columns (excluding No, year, station which are metadata)
+// These are columns that can be converted to f32 for preprocessing
 // CSV header: No,year,month,day,hour,PM2.5,PM10,SO2,NO2,CO,O3,TEMP,PRES,DEWP,RAIN,wd,WSPM,station
+// Excluded: No (u32 identifier), year (not used), station (no f32 conversion)
+// Included: wd (WindDirection converts to f32 degrees)
 pub const SOURCE_COLUMNS: &[&str] = &[
-    "day", "hour", "month", "PM2.5", "PM10", "SO2", "NO2", "CO", "O3", "TEMP", "PRES", "DEWP",
+    "month", "day", "hour", "PM2.5", "PM10", "SO2", "NO2", "CO", "O3", "TEMP", "PRES", "DEWP",
     "RAIN", "wd", "WSPM",
-];
+]; // 15 columns total (indices 0-14)
 
 // CSV file paths for Beijing air quality data
 // These are relative to the project root
@@ -260,6 +303,8 @@ pub const WANSHOUXIGONG_PATH: &str = "src/optimizations/beijing_air_quality/data
 ```
 
 **Note**: This module contains domain-specific ingestion logic for Beijing air quality. Other domains will have their own ingestion modules with their own SOURCE_COLUMNS and file paths.
+
+**Important**: SOURCE_COLUMNS must only include columns that have valid f32 conversions. The current list excludes `No` (u32), `year` (unused), and `station` (enum without f32 conversion).
 
 **Future**: CSV parsing logic from parser.rs could eventually move here.
 
@@ -340,7 +385,7 @@ let svc = Arc::new(
 
 3. **Remove `Args` struct and `Parser`** - only export `BeijingCommand` subcommand
 
-4. **Remove `main()` function** - no longer a binary entry point
+4. **Remove `main()` function** - This file used to be a standalone binary with its own `main()` function, but it should now be integrated as a subcommand in `src/bin/client.rs`. The top-level `Args` struct with `#[derive(Parser)]` should also be removed - only the `BeijingCommand` enum with `#[derive(Subcommand)]` should remain.
 
 5. **Add async execute method**:
    ```rust
