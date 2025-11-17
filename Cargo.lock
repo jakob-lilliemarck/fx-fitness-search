@@ -1177,13 +1177,14 @@ dependencies = [
 
 [[package]]
 name = "fx-durable-ga"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4593d52c23baa8d042075067120c4b6fa51ef58178c8b439fc2de514d7be8ce1"
+checksum = "17ce5a7497e6ed7ee163302eafcca5a28917c8579dca4a90f929cd170cc5189f"
 dependencies = [
  "anyhow",
  "chrono",
  "const-fnv1a-hash",
+ "dotenv",
  "futures",
  "fx-event-bus",
  "fx-mq-jobs",
@@ -1192,7 +1193,9 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.17",
+ "tokio",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -1225,9 +1228,9 @@ dependencies = [
 
 [[package]]
 name = "fx-event-bus"
-version = "0.1.7"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e96b294470d1883377f8a208a048082bee9985afdd7c101ec88f201e479aac6"
+checksum = "323c3eb1f81264c35cf53ef3960636ef8e900cea1d5c850778f71f33d8125340"
 dependencies = [
  "chrono",
  "const-fnv1a-hash",

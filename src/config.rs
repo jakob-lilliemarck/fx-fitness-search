@@ -2,6 +2,7 @@ use sqlx::{PgPool, types::Uuid};
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinSet;
 
+use crate::optimizations::beijing_air_quality::{BeijingEvaluator, BeijingPhenotype};
 use crate::optimizations::feng::{self, FengEvaluator};
 
 #[derive(Debug, thiserror::Error)]
@@ -254,13 +255,15 @@ impl App {
         // Run required migrations migrations
         fx_event_bus::run_migrations(&pool).await?;
         fx_mq_jobs::run_migrations(&pool, fx_mq_jobs::FX_MQ_JOBS_SCHEMA_NAME).await?;
-        fx_durable_ga::run_migrations(&pool).await?;
+        fx_durable_ga::migrations::run_migrations(&pool).await?;
 
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(
             fx_durable_ga::bootstrap(pool.clone())
                 .await?
                 .register::<feng::Config, _>(FengEvaluator)
+                .await?
+                .register::<BeijingPhenotype, _>(BeijingEvaluator)
                 .await?
                 .build(),
         );
