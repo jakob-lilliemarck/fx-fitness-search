@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{dataset::DatasetBuilder, preprocessor::Pipeline};
+use crate::core::{dataset::DatasetBuilder, preprocessor::Pipeline};
 
 use super::parser::read_csv;
 
@@ -30,9 +30,6 @@ pub const PATHS: &[&str] = &[
     "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanliu_20130301-20170228.csv",
     "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanshouxigong_20130301-20170228.csv",
 ];
-
-pub const WANSHOUXIGONG_PATH: &str =
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanshouxigong_20130301-20170228.csv";
 
 /// Build a DatasetBuilder from a CSV file
 pub fn build_dataset_from_file(

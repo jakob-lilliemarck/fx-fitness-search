@@ -1,10 +1,10 @@
 use super::ingestion::PATHS;
 use super::ingestion::build_dataset_from_file;
 use super::phenotype::BeijingPhenotype;
-use crate::dataset::SequenceDataset;
-use crate::model::{FeedForward, SequenceModel};
-use crate::preprocessor::{Cos, Node, Pipeline, Sin};
-use crate::train;
+use crate::core::dataset::SequenceDataset;
+use crate::core::model::{FeedForward, SequenceModel};
+use crate::core::preprocessor::{Cos, Node, Pipeline, Sin};
+use crate::core::train;
 use burn::backend::ndarray::NdArrayDevice;
 use burn::backend::{Autodiff, NdArray};
 use burn::data::dataloader::Dataset;
@@ -115,13 +115,12 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
             let valid_dataset = SequenceDataset::from_items(all_valid_items);
 
             // Create FeedForward model
-            // FIXME: this can not be hardcoded! we must make this depend on config!!
-            let input_size = 11; // 4 time features + 7 optimized features
+            let input_size = 4 + phenotype.features().len();
             let model = FeedForward::<Backend>::new(
                 &device,
                 input_size,
                 phenotype.hidden_size,
-                1, // output_size = 1 (single target)
+                targets.len(),
                 phenotype.sequence_length,
             );
 

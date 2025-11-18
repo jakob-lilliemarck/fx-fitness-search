@@ -1,4 +1,4 @@
-use crate::dataset::SequenceDatasetItem;
+use super::dataset::SequenceDatasetItem;
 use burn::data::dataloader::batcher::Batcher;
 use burn::prelude::*;
 

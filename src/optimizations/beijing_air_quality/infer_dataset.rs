@@ -20,9 +20,9 @@
 //! Tradeoff: Requires loading all preprocessed data into memory.
 
 use super::ingestion::build_dataset_from_file;
-use crate::dataset::Metadata;
-use crate::inference::InferenceEngine;
-use crate::preprocessor::{Node, Pipeline};
+use crate::core::dataset::Metadata;
+use crate::core::inference::InferenceEngine;
+use crate::core::preprocessor::{Node, Pipeline};
 use burn::data::dataloader::Dataset;
 use burn::prelude::Backend;
 use std::fmt;
