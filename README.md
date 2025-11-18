@@ -73,7 +73,7 @@ cargo run --release --bin client -- beijing request-optimization \
   --mutagen 'MUTAGEN(0.7,0.35)' \
   --initial-population 40 \
   --prediction-horizon 1 \
-  --target 'temp=TEMP'
+  --targets 'temp=TEMP'
 ```
 
 **Standard Run (Medium Scale):**
