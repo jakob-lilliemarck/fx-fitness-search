@@ -1,9 +1,10 @@
-use super::dataset::{SequenceDataset, build_dataset_from_file};
 use super::ingestion::PATHS;
+use super::ingestion::build_dataset_from_file;
 use super::phenotype::BeijingPhenotype;
-use super::train;
+use crate::dataset::SequenceDataset;
 use crate::model::{FeedForward, SequenceModel};
 use crate::preprocessor::{Cos, Node, Pipeline, Sin};
+use crate::train;
 use burn::backend::ndarray::NdArrayDevice;
 use burn::backend::{Autodiff, NdArray};
 use burn::data::dataloader::Dataset;

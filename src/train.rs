@@ -1,7 +1,7 @@
-use super::dataset::SequenceDataset;
-use super::train_config::TrainConfig;
 use crate::batcher::SequenceBatcher;
+use crate::dataset::SequenceDataset;
 use crate::model::SequenceModel;
+use crate::train_config::TrainConfig;
 use burn::data::dataloader::Dataset;
 use burn::data::dataloader::batcher::Batcher;
 use burn::grad_clipping::GradientClippingConfig;
@@ -191,8 +191,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::dataset::DatasetBuilder;
     use super::*;
+    use crate::dataset::DatasetBuilder;
     use crate::model::SimpleLstm;
     use crate::preprocessor::Pipeline;
     use burn::backend::ndarray::NdArrayDevice;

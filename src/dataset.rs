@@ -1,4 +1,3 @@
-use super::parser::read_csv;
 use crate::preprocessor::Pipeline;
 use burn::data::dataset::Dataset;
 use std::collections::HashMap;
@@ -10,17 +9,12 @@ pub type Timestep = Vec<f32>;
 pub type RecordID = String;
 pub type ColumnID = String;
 
-pub const VALID_COLUMNS: &[&str] = &[
-    "day", "hour", "month", "PM2.5", "PM10", "SO2", "NO2", "CO", "O3", "TEMP", "PRES", "DEWP",
-    "RAIN", "wd", "WSPM",
-];
-
 /// Metadata about the source rows for a sequence item
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    pub sequence_start_row_no: String, // CSV row identifier of first sequence timestep
-    pub sequence_end_row_no: String,   // CSV row identifier of last sequence timestep (anchor)
-    pub target_row_no: String,         // CSV row identifier of the target value being predicted
+    pub sequence_start_row_id: String, // CSV row identifier of first sequence timestep
+    pub sequence_end_row_id: String,   // CSV row identifier of last sequence timestep (anchor)
+    pub target_row_id: String,         // CSV row identifier of the target value being predicted
     pub target_at_sequence_end: Vec<f32>, // Preprocessed target value at the end of sequence (for naive baseline)
 }
 
@@ -227,118 +221,6 @@ impl DatasetBuilder {
     }
 }
 
-/// Build a DatasetBuilder from a CSV file
-pub fn build_dataset_from_file(
-    path: &str,
-    features: &[(String, String, Pipeline)],
-    targets: &[(String, String, Pipeline)],
-) -> anyhow::Result<DatasetBuilder> {
-    // Process features (clone pipelines for each file)
-    let mut feature_pipelines = HashMap::with_capacity(features.len());
-    let mut feature_output_names = Vec::with_capacity(features.len());
-    let mut feature_source_columns = Vec::with_capacity(features.len());
-
-    for (output_name, source_column, pipeline) in features {
-        feature_pipelines.insert(output_name.clone(), pipeline.clone());
-        feature_output_names.push(output_name.clone());
-        feature_source_columns.push(source_column.clone());
-    }
-
-    // Process targets (clone pipelines for each file)
-    let mut target_pipelines = HashMap::with_capacity(targets.len());
-    let mut target_output_names = Vec::with_capacity(targets.len());
-    let mut target_source_columns = Vec::with_capacity(targets.len());
-
-    for (output_name, source_column, pipeline) in targets {
-        target_pipelines.insert(output_name.clone(), pipeline.clone());
-        target_output_names.push(output_name.clone());
-        target_source_columns.push(source_column.clone());
-    }
-
-    // Collect all unique source columns needed
-    let mut all_source_columns = feature_source_columns.clone();
-    for col in &target_source_columns {
-        if !all_source_columns.contains(col) {
-            all_source_columns.push(col.clone());
-        }
-    }
-
-    let mut dataset_builder = DatasetBuilder::new(
-        feature_pipelines,
-        feature_output_names,
-        feature_source_columns,
-        target_pipelines,
-        target_output_names,
-        target_source_columns,
-        Some(35066),
-    );
-
-    // Read and push all rows from specified file
-    for result in read_csv(path)? {
-        let row = result?;
-
-        // Create a record with ALL the source columns needed
-        let mut record = HashMap::new();
-        let mut has_missing = false;
-
-        for source_column in &all_source_columns {
-            let wd: Option<f32> = row.wd.clone().map(|wd| wd.into());
-            let value = match source_column.as_str() {
-                "PM2.5" => row.pm2_5,
-                "PM10" => row.pm10,
-                "SO2" => row.so2,
-                "NO2" => row.no2,
-                "CO" => row.co,
-                "O3" => row.o3,
-                "TEMP" => row.temp,
-                "PRES" => row.pres,
-                "DEWP" => row.dewp,
-                "RAIN" => row.rain,
-                "WSPM" => row.wspm,
-                "hour" => Some(row.hour as f32),
-                "day" => Some(row.day as f32),
-                "month" => Some(row.month as f32),
-                "wd" => wd,
-                _ => None,
-            };
-
-            if let Some(v) = value {
-                record.insert(source_column.clone(), v);
-            } else {
-                has_missing = true;
-            }
-        }
-
-        // Skip rows with missing values
-        if has_missing {
-            continue;
-        }
-
-        // Push to builder (skips rows where pipeline returns None)
-        dataset_builder.push(record, row.no.to_string())?;
-    }
-
-    Ok(dataset_builder)
-}
-
-/// A single, self-contained training example.
-///
-/// Each item represents a complete sequence-to-target mapping and is independent
-/// of all other items. This means:
-/// - All timesteps in `sequence` must come from the same continuous time series
-///   (e.g., same weather station, no gaps)
-/// - The `target` must be the natural continuation of that sequence
-/// - Items from different sources (stations, time periods) can be safely mixed
-///   in the same dataset/batch
-///
-/// # Example
-/// Valid batch composition:
-/// - Item 0: Station A, hours 100-123 → predict hour 124
-/// - Item 1: Station B, hours 50-73 → predict hour 74
-/// - Item 2: Station A, hours 200-223 → predict hour 224
-///
-/// Each item is internally consistent, so mixing them doesn't create artificial
-/// sequences that span different contexts.
 #[derive(Clone)]
 pub struct SequenceDatasetItem {
     pub sequence: Vec<Timestep>,
@@ -373,9 +255,9 @@ impl SequenceDataset {
 
             // Create Metadata from record_ids and target value at sequence end
             let metadata = Metadata {
-                sequence_start_row_no: record_ids[start_index].clone(),
-                sequence_end_row_no: record_ids[end_index].clone(),
-                target_row_no: record_ids[target_index].clone(),
+                sequence_start_row_id: record_ids[start_index].clone(),
+                sequence_end_row_id: record_ids[end_index].clone(),
+                target_row_id: record_ids[target_index].clone(),
                 target_at_sequence_end: targets[end_index].clone(),
             };
 
@@ -547,9 +429,9 @@ mod tests {
         assert_eq!(item.target, vec![40.0]); // 4th target value (index 3) = 40
 
         // Metadata row numbers (1-based to match data indices)
-        assert_eq!(md.sequence_start_row_no, "1");
-        assert_eq!(md.sequence_end_row_no, "3");
-        assert_eq!(md.target_row_no, "4");
+        assert_eq!(md.sequence_start_row_id, "1");
+        assert_eq!(md.sequence_end_row_id, "3");
+        assert_eq!(md.target_row_id, "4");
 
         // Anchor target should be target[end_index] = targets[2] = [30]
         assert_eq!(md.target_at_sequence_end, vec![30.0]);
@@ -566,9 +448,9 @@ mod tests {
         assert_eq!(item.sequence, vec![vec![2.0], vec![3.0], vec![4.0]]);
         assert_eq!(item.target, vec![50.0]);
 
-        assert_eq!(md.sequence_start_row_no, "2");
-        assert_eq!(md.sequence_end_row_no, "4");
-        assert_eq!(md.target_row_no, "5");
+        assert_eq!(md.sequence_start_row_id, "2");
+        assert_eq!(md.sequence_end_row_id, "4");
+        assert_eq!(md.target_row_id, "5");
 
         assert_eq!(md.target_at_sequence_end, vec![40.0]);
     }
@@ -585,9 +467,9 @@ mod tests {
         assert_eq!(item.sequence, vec![vec![1.0], vec![2.0], vec![3.0]]);
         assert_eq!(item.target, vec![60.0]);
 
-        assert_eq!(md.sequence_start_row_no, "1");
-        assert_eq!(md.sequence_end_row_no, "3");
-        assert_eq!(md.target_row_no, "6");
+        assert_eq!(md.sequence_start_row_id, "1");
+        assert_eq!(md.sequence_end_row_id, "3");
+        assert_eq!(md.target_row_id, "6");
 
         assert_eq!(md.target_at_sequence_end, vec![30.0]);
     }

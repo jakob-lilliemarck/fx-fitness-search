@@ -1,4 +1,4 @@
-use crate::optimizations::beijing_air_quality::dataset::SequenceDatasetItem;
+use crate::dataset::SequenceDatasetItem;
 use burn::data::dataloader::batcher::Batcher;
 use burn::prelude::*;
 

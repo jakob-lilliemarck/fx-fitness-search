@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use fx_durable_ga_app::config::{App, ClientConfig};
-use fx_durable_ga_app::optimizations::beijing_air_quality::commands::BeijingCommand;
+use fx_durable_ga_app::optimizations::beijing_air_quality::BeijingCommand;
 
 #[derive(Debug, Parser)]
 #[command(

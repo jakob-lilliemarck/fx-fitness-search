@@ -19,8 +19,9 @@
 //! Expected speedup: ~35x (from 35k single forward passes → 1k batched forward passes).
 //! Tradeoff: Requires loading all preprocessed data into memory.
 
-use super::dataset::{Metadata, build_dataset_from_file};
-use super::inference::InferenceEngine;
+use super::ingestion::build_dataset_from_file;
+use crate::dataset::Metadata;
+use crate::inference::InferenceEngine;
 use crate::preprocessor::{Node, Pipeline};
 use burn::data::dataloader::Dataset;
 use burn::prelude::Backend;
@@ -44,7 +45,7 @@ impl fmt::Display for InferenceResult {
         write!(
             f,
             "[{}] pred: {:?}, actual: {:?}, current: {:?}",
-            self.metadata.target_row_no,
+            self.metadata.target_row_id,
             format_vec(&self.prediction),
             format_vec(&self.target),
             format_vec(&self.prediction_naive)
@@ -270,9 +271,9 @@ pub fn write_results_to_csv(results: &[InferenceResult], path: &str) -> anyhow::
         writeln!(
             file,
             "{},{},{},{},{},{},{},{},{}",
-            result.metadata.sequence_start_row_no,
-            result.metadata.sequence_end_row_no,
-            result.metadata.target_row_no,
+            result.metadata.sequence_start_row_id,
+            result.metadata.sequence_end_row_id,
+            result.metadata.target_row_id,
             pred_str,
             actual_str,
             current_str,
