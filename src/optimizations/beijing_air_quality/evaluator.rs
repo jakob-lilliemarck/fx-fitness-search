@@ -26,7 +26,7 @@ impl BeijingEvaluator {
 impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
     fn fitness<'a>(
         &self,
-        _genotype_id: Uuid,
+        genotype_id: Uuid,
         phenotype: BeijingPhenotype,
         _terminated: &'a Box<dyn Terminated>,
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
@@ -114,6 +114,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
             let valid_dataset = SequenceDataset::from_items(all_valid_items);
 
             // Create FeedForward model
+            // FIXME: this can not be hardcoded! we must make this depend on config!!
             let input_size = 11; // 4 time features + 7 optimized features
             let model = FeedForward::<Backend>::new(
                 &device,
@@ -122,6 +123,9 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 1, // output_size = 1 (single target)
                 phenotype.sequence_length,
             );
+
+            // Create a unique filepath to store the model and config files of this genotype
+            let model_file_path = format!("{}/{}", model_save_path, genotype_id.to_string());
 
             // Train the model
             let (_trained_model, best_valid_loss) = train::train(
@@ -132,7 +136,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 100, // batch_size (fixed)
                 phenotype.learning_rate,
                 model,
-                Some(model_save_path), // model_save_path (don't save during GA optimization)
+                Some(model_file_path), // model_save_path (don't save during GA optimization)
                 None,                  // train_config (don't save config during GA)
             )
             .await;
