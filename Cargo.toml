@@ -21,7 +21,7 @@ sqlx = { version = "0.8", default-features = false, features = [
 anyhow = "1.0.95"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
-fx-durable-ga = "0.7.0"
+fx-durable-ga = { path = "../fx-durable-ga" }
 fx-mq-jobs = "0.1.8"
 fx-event-bus = "0.1.7"
 num_cpus = "1.17.0"

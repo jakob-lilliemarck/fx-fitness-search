@@ -10,6 +10,8 @@ use burn::backend::{Autodiff, NdArray};
 use burn::data::dataloader::Dataset;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};
+use serde::Deserialize;
+use serde::Serialize;
 use sqlx::types::Uuid;
 
 pub struct BeijingEvaluator {
@@ -24,16 +26,45 @@ impl BeijingEvaluator {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RequestVariables {
+    prediction_horizon: usize,
+    targets: String,
+}
+
+impl RequestVariables {
+    pub fn new(prediction_horizon: usize, targets: String) -> Self {
+        Self {
+            prediction_horizon,
+            targets,
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum EvaluationError {
+    #[error("Missing request data")]
+    MissingData,
+}
+
 impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
     fn fitness<'a>(
         &self,
         genotype_id: Uuid,
         phenotype: BeijingPhenotype,
+        request: &'a fx_durable_ga::models::Request,
         _terminated: &'a Box<dyn Terminated>,
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
+        // The request is the place where we should store prediction_horizon and targets (incl pipelines)
+        // It will be a json field on request - just deserialize it and use in this function.
+
         let model_save_path = self.model_save_path.clone();
 
         Box::pin(async move {
+            let req_var: RequestVariables =
+                serde_json::from_value(request.data.clone().ok_or(EvaluationError::MissingData)?)?;
+            tracing::info!(message = "Request data", req_var = ?req_var);
+
             type Backend = Autodiff<NdArray>;
             let device = NdArrayDevice::default();
 

@@ -3,7 +3,10 @@ use const_fnv1a_hash::fnv1a_hash_str_32;
 use fx_durable_ga::models::{
     Crossover, Distribution, Encodeable, FitnessGoal, Mutagen, Schedule, Selector,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+use crate::optimizations::beijing_air_quality::evaluator::RequestVariables;
 
 use super::phenotype::BeijingPhenotype;
 
@@ -177,6 +180,14 @@ pub enum BeijingCommand {
         /// Initial population size using latin hypercube
         #[arg(long, required = true)]
         initial_population: u32,
+
+        /// Prediction horizon to predict values at
+        #[arg(long, required = true)]
+        prediction_horizon: usize,
+
+        /// Target to predict including any preprocessing
+        #[arg(long, required = true)]
+        targets: String,
     },
 }
 
@@ -192,6 +203,8 @@ impl BeijingCommand {
                 selector,
                 mutagen,
                 initial_population,
+                prediction_horizon,
+                targets,
             } => {
                 // Hardcode type_name from BeijingPhenotype::NAME
                 let type_name = BeijingPhenotype::NAME;
@@ -206,6 +219,7 @@ impl BeijingCommand {
                     mutagen,
                     Crossover::single_point(),
                     Distribution::latin_hypercube(initial_population),
+                    Some(RequestVariables::new(prediction_horizon, targets)),
                 )
                 .await?;
 

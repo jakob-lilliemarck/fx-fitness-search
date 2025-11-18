@@ -71,7 +71,9 @@ cargo run --release --bin client -- beijing request-optimization \
   --schedule 'GENERATIONAL(10,30)' \
   --selector 'TOURNAMENT(3,7)' \
   --mutagen 'MUTAGEN(0.7,0.35)' \
-  --initial-population 40
+  --initial-population 40 \
+  --prediction-horizon 1 \
+  --target 'temp=TEMP'
 ```
 
 **Standard Run (Medium Scale):**
