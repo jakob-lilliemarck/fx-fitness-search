@@ -1,6 +1,8 @@
 use clap::Subcommand;
 use const_fnv1a_hash::fnv1a_hash_str_32;
-use fx_durable_ga::models::{Crossover, Distribution, Encodeable, FitnessGoal, Mutagen, Schedule, Selector};
+use fx_durable_ga::models::{
+    Crossover, Distribution, Encodeable, FitnessGoal, Mutagen, Schedule, Selector,
+};
 use std::sync::Arc;
 
 use super::phenotype::BeijingPhenotype;
@@ -102,8 +104,9 @@ fn parse_selector(s: &str) -> Result<Selector, String> {
         let sample_size: usize = parts[1]
             .parse()
             .map_err(|_| format!("Invalid sample_size value: {}", parts[1]))?;
-
-        Ok(Selector::tournament(tournament_size, sample_size))
+        let selector: Selector =
+            Selector::tournament(tournament_size, sample_size).map_err(|err| err.to_string())?;
+        Ok(selector)
     } else if let Some(inner) = s
         .strip_prefix("ROULETTE(")
         .and_then(|s| s.strip_suffix(")"))

@@ -106,8 +106,9 @@ fn parse_selector(s: &str) -> Result<Selector, String> {
         let sample_size: usize = parts[1]
             .parse()
             .map_err(|_| format!("Invalid sample_size value: {}", parts[1]))?;
-
-        Ok(Selector::tournament(tournament_size, sample_size))
+        let selector =
+            Selector::tournament(tournament_size, sample_size).map_err(|err| err.to_string())?;
+        Ok(selector)
     } else if let Some(inner) = s
         .strip_prefix("ROULETTE(")
         .and_then(|s| s.strip_suffix(")"))

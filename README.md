@@ -45,6 +45,10 @@ LEASE_SECONDS=300
 ```bash
 SQLX_OFFLINE=true cargo build --release
 ```
+### Migrate
+```bash
+SQLX_OFFLINE=true cargo run --release --bin migrate
+```
 
 ## Usage
 

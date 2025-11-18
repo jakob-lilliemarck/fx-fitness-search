@@ -1177,9 +1177,9 @@ dependencies = [
 
 [[package]]
 name = "fx-durable-ga"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ce5a7497e6ed7ee163302eafcca5a28917c8579dca4a90f929cd170cc5189f"
+checksum = "407f0305867f95d329b38b36fb9fcb302842f926ec7f4a18ccc5fecbaf62f2f2"
 dependencies = [
  "anyhow",
  "chrono",
