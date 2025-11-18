@@ -1,7 +1,7 @@
-use super::batcher::SequenceBatcher;
 use super::dataset::SequenceDataset;
-use super::model::SequenceModel;
 use super::train_config::TrainConfig;
+use crate::batcher::SequenceBatcher;
+use crate::model::SequenceModel;
 use burn::data::dataloader::Dataset;
 use burn::data::dataloader::batcher::Batcher;
 use burn::grad_clipping::GradientClippingConfig;
@@ -192,9 +192,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::super::dataset::DatasetBuilder;
-    use super::super::model::SimpleLstm;
-    use super::super::preprocessor::Pipeline;
     use super::*;
+    use crate::model::SimpleLstm;
+    use crate::preprocessor::Pipeline;
     use burn::backend::ndarray::NdArrayDevice;
     use burn::backend::{Autodiff, NdArray};
     use std::collections::HashMap;

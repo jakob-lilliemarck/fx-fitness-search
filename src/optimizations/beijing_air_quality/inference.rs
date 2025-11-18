@@ -1,7 +1,7 @@
-use super::batcher::SequenceBatcher;
 use super::dataset::{SequenceDatasetItem, Timestep};
-use super::model::{FeedForward, SequenceModel};
 use super::train_config::TrainConfig;
+use crate::batcher::SequenceBatcher;
+use crate::model::{FeedForward, SequenceModel};
 use burn::data::dataloader::batcher::Batcher;
 use burn::prelude::*;
 use burn::record::{CompactRecorder, Recorder};

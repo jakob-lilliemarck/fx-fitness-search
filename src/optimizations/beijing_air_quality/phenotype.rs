@@ -2,7 +2,7 @@ use fx_durable_ga::models::{Encodeable, GeneBounds};
 use serde::{Deserialize, Serialize};
 
 use super::ingestion::SOURCE_COLUMNS;
-use super::preprocessor::{Cos, Node, Pipeline, Roc, Sin, Std, ZScore};
+use crate::preprocessor::{Cos, Node, Pipeline, Roc, Sin, Std, ZScore};
 
 // Constants for gene bounds
 const FEATURE_COUNT: usize = 7;
@@ -89,8 +89,8 @@ impl Transform {
 /// A feature with its source column and preprocessing pipeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct Feature {
-    pub(super) source: String,              // e.g., "TEMP", "PRES"
-    pub(super) transforms: Vec<Transform>,  // Pipeline of transforms to apply
+    pub(super) source: String,             // e.g., "TEMP", "PRES"
+    pub(super) transforms: Vec<Transform>, // Pipeline of transforms to apply
 }
 
 impl Feature {
@@ -140,8 +140,12 @@ impl Encodeable for BeijingPhenotype {
 
             // Pipeline length (0, 1, or 2 transforms)
             bounds.push(
-                GeneBounds::integer(0, MAX_PIPELINE_LENGTH as i32, (MAX_PIPELINE_LENGTH + 1) as u32)
-                    .unwrap(),
+                GeneBounds::integer(
+                    0,
+                    MAX_PIPELINE_LENGTH as i32,
+                    (MAX_PIPELINE_LENGTH + 1) as u32,
+                )
+                .unwrap(),
             );
 
             // Transform 1 index (0 to TRANSFORM_COUNT-1)

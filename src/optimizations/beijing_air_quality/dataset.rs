@@ -1,5 +1,5 @@
 use super::parser::read_csv;
-use super::preprocessor::Pipeline;
+use crate::preprocessor::Pipeline;
 use burn::data::dataset::Dataset;
 use std::collections::HashMap;
 use std::fs::File;
@@ -419,8 +419,8 @@ impl Dataset<SequenceDatasetItem> for SequenceDataset {
 
 #[cfg(test)]
 mod tests {
-    use super::super::preprocessor::Pipeline;
     use super::*;
+    use crate::preprocessor::Pipeline;
 
     /// Helper to build a simple dataset with integers for easy visual verification.
     /// Features: [[1], [2], [3], ..., [num_timesteps]]

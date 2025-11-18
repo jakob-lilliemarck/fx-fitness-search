@@ -1,11 +1,7 @@
-use sqlx::database;
+use crate::optimizations::beijing_air_quality::{BeijingEvaluator, BeijingPhenotype};
 use sqlx::{PgPool, types::Uuid};
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinSet;
-use tracing::instrument;
-
-use crate::optimizations::beijing_air_quality::{BeijingEvaluator, BeijingPhenotype};
-use crate::optimizations::feng::{self, FengEvaluator};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -135,6 +131,7 @@ pub struct ServerConfig {
 #[derive(Clone, Debug)]
 pub struct ClientConfig {
     pub database_url: String,
+    pub model_save_path: String,
 }
 
 impl ServerConfig {
@@ -158,7 +155,8 @@ impl ServerConfig {
         let workers = physical_cores / 2;
 
         tracing::info!(
-            message = "Server configuration loaded",
+            message = "Configuration loaded",
+            database_url = %database_url,
             host_id = %host_id,
             lease_seconds = lease_seconds.as_secs(),
             shutdown_timeout_seconds = shutdown_timeout_seconds.as_secs(),
@@ -180,13 +178,18 @@ impl ServerConfig {
 impl ClientConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         let database_url = DatabaseUrl::from_env()?;
+        let model_save_path = ModelSavePath::from_env()?;
 
         tracing::info!(
             message = "Configuration loaded",
-            database_url = database_url,
+            database_url = %database_url,
+            model_save_path = %model_save_path
         );
 
-        Ok(ClientConfig { database_url })
+        Ok(ClientConfig {
+            database_url,
+            model_save_path,
+        })
     }
 }
 
@@ -194,6 +197,26 @@ impl ClientConfig {
 pub enum Conf {
     Client(ClientConfig),
     Server(ServerConfig),
+}
+
+impl Conf {
+    pub fn database_url(&self) -> &str {
+        match &self {
+            Conf::Client(ClientConfig { database_url, .. }) => database_url,
+            Conf::Server(ServerConfig { database_url, .. }) => database_url,
+        }
+    }
+
+    pub fn model_save_path(&self) -> &str {
+        match &self {
+            Conf::Client(ClientConfig {
+                model_save_path, ..
+            }) => model_save_path,
+            Conf::Server(ServerConfig {
+                model_save_path, ..
+            }) => model_save_path,
+        }
+    }
 }
 
 pub struct Tasks {
@@ -303,10 +326,7 @@ impl App {
     }
 
     async fn new(conf: Conf) -> anyhow::Result<Self> {
-        let database_url = match &conf {
-            Conf::Client(ClientConfig { database_url }) => database_url,
-            Conf::Server(ServerConfig { database_url, .. }) => database_url,
-        };
+        let database_url = conf.database_url();
 
         // Create a database connection pool
         let pool = sqlx::postgres::PgPoolOptions::new()
@@ -321,9 +341,7 @@ impl App {
         let svc = Arc::new(
             fx_durable_ga::bootstrap(pool.clone())
                 .await?
-                .register::<feng::Config, _>(FengEvaluator)
-                .await?
-                .register::<BeijingPhenotype, _>(BeijingEvaluator)
+                .register::<BeijingPhenotype, _>(BeijingEvaluator::new(conf.model_save_path()))
                 .await?
                 .build(),
         );

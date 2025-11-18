@@ -21,7 +21,7 @@
 
 use super::dataset::{Metadata, build_dataset_from_file};
 use super::inference::InferenceEngine;
-use super::preprocessor::{Node, Pipeline};
+use crate::preprocessor::{Node, Pipeline};
 use burn::data::dataloader::Dataset;
 use burn::prelude::Backend;
 use std::fmt;
