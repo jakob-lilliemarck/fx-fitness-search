@@ -199,8 +199,8 @@ mod tests {
     use burn::backend::{Autodiff, NdArray};
     use std::collections::HashMap;
 
-    #[test]
-    fn test_training_converges() {
+    #[tokio::test]
+    async fn test_training_converges() {
         type Backend = Autodiff<NdArray>;
         let device = NdArrayDevice::default();
 
@@ -255,7 +255,8 @@ mod tests {
             model,
             None,
             None,
-        );
+        )
+        .await;
 
         println!("Training complete! Check if losses decreased.");
     }
