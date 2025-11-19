@@ -1,30 +1,20 @@
 use super::ingestion::PATHS;
-use super::ingestion::build_dataset_from_file;
 use super::phenotype::BeijingPhenotype;
-use crate::core::dataset::SequenceDataset;
-use crate::core::model::{FeedForward, SequenceModel};
 use crate::core::preprocessor::Transform;
 use crate::core::preprocessor::{Cos, Node, Pipeline, Sin};
-use crate::core::train;
 use crate::core::train_config::TrainConfig;
-use burn::backend::ndarray::NdArrayDevice;
-use burn::backend::{Autodiff, NdArray};
-use burn::data::dataloader::Dataset;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
-pub struct BeijingEvaluator {
-    model_save_path: String,
-}
+pub struct BeijingEvaluator;
 
 impl BeijingEvaluator {
-    pub fn new(model_save_path: &str) -> Self {
-        Self {
-            model_save_path: model_save_path.to_string(),
-        }
+    pub fn new(_model_save_path: &str) -> Self {
+        Self
     }
 }
 
@@ -48,10 +38,32 @@ impl RequestVariables {
     }
 }
 
+/// Request sent to train_worker subprocess
+#[derive(Debug, Serialize)]
+struct TrainWorkerRequest {
+    train_config: TrainConfig,
+    genotype_id: String,
+    data_paths: Vec<String>,
+    features: Vec<String>,
+    targets: Vec<String>,
+    epochs: usize,
+    batch_size: usize,
+    learning_rate: f64,
+}
+
+/// Response from train_worker subprocess
+#[derive(Debug, Deserialize)]
+struct TrainWorkerResponse {
+    fitness: f64,
+    genotype_id: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum EvaluationError {
     #[error("Missing request data")]
     MissingData,
+    #[error("Worker subprocess failed: {0}")]
+    WorkerFailed(String),
 }
 
 impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
@@ -62,22 +74,11 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
         request: &'a fx_durable_ga::models::Request,
         _terminated: &'a Box<dyn Terminated>,
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
-        let model_save_path = self.model_save_path.clone();
-
         Box::pin(async move {
             let req_var: RequestVariables =
                 serde_json::from_value(request.data.clone().ok_or(EvaluationError::MissingData)?)?;
 
             tracing::info!(message = "Request data", req_var = ?req_var);
-            // FIXME
-            // At this point, we should be able to combine the phenotype and the request to create a TrainConfig
-            // The train config shall be passed to train, so it will be written to file.
-            // Then - as part of this refactor, I think it would be wise to also unify pipeline <-> string parsing. It seems we got an uneccessary level
-            // of indirection in phenotype.rs defining "Transform" and "Feature". I would much rather define a single unified way, probably in the preprocessor.rs file
-            // that handles the whole "dest=source:pipeline pipeline" syntax parsing.
-
-            type Backend = Autodiff<NdArray>;
-            let device = NdArrayDevice::default();
 
             // Build time features (always included) as Transform instances
             let mut features = vec![
@@ -122,44 +123,6 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 pipeline: Pipeline::new(vec![]),
             }];
 
-            // Load data from all stations and combine into unified datasets
-            let mut all_train_items = Vec::new();
-            let mut all_valid_items = Vec::new();
-
-            for path in PATHS {
-                let builder = build_dataset_from_file(path, &features, &targets)?;
-
-                // Split 80/20 train/validation
-                let (train_dataset, valid_dataset) = builder.build(
-                    phenotype.sequence_length,
-                    1, // prediction_horizon = 1 (predict 1 timestep ahead)
-                    Some(0.8),
-                )?;
-
-                // Extract items with metadata from training dataset
-                for i in 0..train_dataset.len() {
-                    if let (Some(item), Some(metadata)) =
-                        (train_dataset.get(i), train_dataset.get_metadata(i))
-                    {
-                        all_train_items.push((metadata.clone(), item));
-                    }
-                }
-
-                // Extract items with metadata from validation dataset
-                if let Some(valid) = valid_dataset {
-                    for i in 0..valid.len() {
-                        if let (Some(item), Some(metadata)) = (valid.get(i), valid.get_metadata(i))
-                        {
-                            all_valid_items.push((metadata.clone(), item));
-                        }
-                    }
-                }
-            }
-
-            // Combine all items into unified datasets
-            let train_dataset = SequenceDataset::from_items(all_train_items);
-            let valid_dataset = SequenceDataset::from_items(all_valid_items);
-
             let input_size = 4 + phenotype.features().len();
             let train_config = TrainConfig::new(
                 input_size,
@@ -174,34 +137,85 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 req_var.targets.iter().map(|t| t.to_string()).collect(),
             );
 
-            // Create FeedForward model
-            let model = FeedForward::<Backend>::new(
-                &device,
-                input_size,
-                phenotype.hidden_size,
-                targets.len(),
-                phenotype.sequence_length,
+            // Prepare request for train_worker subprocess
+            let worker_request = TrainWorkerRequest {
+                train_config,
+                genotype_id: genotype_id.to_string(),
+                data_paths: PATHS.iter().map(|s| s.to_string()).collect(),
+                features: features.iter().map(|t| t.to_string()).collect(),
+                targets: targets.iter().map(|t| t.to_string()).collect(),
+                epochs: 25,
+                batch_size: 100,
+                learning_rate: phenotype.learning_rate,
+            };
+
+            tracing::info!(
+                message = "Spawning train_worker subprocess",
+                genotype_id = genotype_id.to_string()
             );
 
-            // Create a unique filepath to store the model and config files of this genotype
-            let model_file_path = format!("{}/{}", model_save_path, genotype_id.to_string());
+            // Spawn subprocess on blocking task to avoid blocking the async runtime
+            // Use select! to allow cancellation - if the future is cancelled, we'll abort the child process
+            let task = tokio::task::spawn_blocking(move || {
+                // Spawn train_worker subprocess
+                let mut child = Command::new("./target/release/train_worker")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to spawn worker: {}", e)))?;
 
-            // Train the model
-            let (_trained_model, best_valid_loss) = train::train(
-                &device,
-                &train_dataset,
-                &valid_dataset,
-                25,  // epochs (fixed)
-                100, // batch_size (fixed)
-                phenotype.learning_rate,
-                model,
-                Some(model_file_path), // model_save_path (don't save during GA optimization)
-                Some(train_config),    // train_config (don't save config during GA)
-            )
-            .await;
+                // Send request to worker via stdin
+                let json_request = serde_json::to_string(&worker_request)?;
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin
+                        .write_all(json_request.as_bytes())
+                        .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to write to worker: {}", e)))?
+                } else {
+                    return Err(
+                        EvaluationError::WorkerFailed("Failed to connect to worker stdin".to_string()).into(),
+                    );
+                }
 
-            // Return validation loss as fitness (cast f32 to f64)
-            Ok(best_valid_loss as f64)
+                // Wait for worker to finish and read response
+                let output = child
+                    .wait_with_output()
+                    .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to wait for worker: {}", e)))?;
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(EvaluationError::WorkerFailed(format!(
+                        "Worker failed with status {}: {}",
+                        output.status, stderr
+                    ))
+                    .into());
+                }
+
+                // Parse response
+                let response: TrainWorkerResponse = serde_json::from_slice(&output.stdout)
+                    .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to parse worker response: {}", e)))?;
+
+                Ok(response)
+            });
+
+            let response = task
+                .await
+                .map_err(|e| {
+                    if e.is_cancelled() {
+                        // Task was cancelled - this is expected if the fitness evaluation was aborted
+                        tracing::info!("Training task was cancelled");
+                    }
+                    EvaluationError::WorkerFailed(format!("Task failed: {}", e))
+                })?
+                .map_err(|e: anyhow::Error| e)?;
+
+            tracing::info!(
+                message = "Train worker completed",
+                genotype_id = response.genotype_id,
+                fitness = response.fitness
+            );
+
+            Ok(response.fitness)
         })
     }
 }

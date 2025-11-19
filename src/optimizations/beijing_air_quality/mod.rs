@@ -1,7 +1,7 @@
 mod commands;
 mod evaluator;
 mod infer_dataset;
-mod ingestion;
+pub mod ingestion;
 mod parser;
 mod phenotype;
 

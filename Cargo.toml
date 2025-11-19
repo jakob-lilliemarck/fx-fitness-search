@@ -48,3 +48,7 @@ path = "src/bin/client.rs"
 [[bin]]
 name = "server"
 path = "src/bin/server.rs"
+
+[[bin]]
+name = "train_worker"
+path = "src/bin/train_worker.rs"

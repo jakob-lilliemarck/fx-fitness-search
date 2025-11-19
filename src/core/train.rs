@@ -12,7 +12,7 @@ use burn::prelude::*;
 use burn::record::CompactRecorder;
 use burn::tensor::backend::AutodiffBackend;
 
-pub async fn train<B, M>(
+pub fn train_sync<B, M>(
     device: &B::Device,
     dataset_training: &SequenceDataset,
     dataset_validation: &SequenceDataset,
@@ -28,8 +28,6 @@ where
     M: SequenceModel<B> + AutodiffModule<B>,
     M::InnerModule: SequenceModel<B::InnerBackend>,
 {
-    // Yield to the runtime
-    tokio::task::yield_now().await;
 
     // Initialize optimizer
     let mut optimizer = AdamConfig::new()
@@ -95,9 +93,6 @@ where
 
             total_train_loss += loss_value;
             num_train_batches += 1;
-
-            // Yield to the runtime
-            tokio::task::yield_now().await;
         }
 
         let avg_train_loss = if num_train_batches > 0 {
@@ -133,9 +128,6 @@ where
 
             total_valid_loss += loss_value;
             num_valid_batches += 1;
-
-            // Yield to the runtime
-            tokio::task::yield_now().await;
         }
 
         let avg_valid_loss = if num_valid_batches > 0 {
@@ -168,8 +160,6 @@ where
             best_valid_loss = best_valid_loss,
             "Epoch completed",
         );
-        // Yield to the runtime
-        tokio::task::yield_now().await;
     }
 
     // Save the trained model and config if a path was provided
