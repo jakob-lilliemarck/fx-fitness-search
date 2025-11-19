@@ -1,14 +1,12 @@
+use super::phenotype::BeijingPhenotype;
+use crate::core::preprocessor::Transform;
+use crate::optimizations::beijing_air_quality::evaluator::RequestVariables;
 use clap::Subcommand;
 use const_fnv1a_hash::fnv1a_hash_str_32;
 use fx_durable_ga::models::{
     Crossover, Distribution, Encodeable, FitnessGoal, Mutagen, Schedule, Selector,
 };
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-
-use crate::optimizations::beijing_air_quality::evaluator::RequestVariables;
-
-use super::phenotype::BeijingPhenotype;
 
 // Value parsers for clap (copied from client.rs)
 
@@ -157,6 +155,10 @@ fn parse_mutagen(s: &str) -> Result<Mutagen, String> {
     }
 }
 
+fn parse_transform(s: &str) -> Result<Transform, String> {
+    Transform::try_from(s).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Subcommand)]
 pub enum BeijingCommand {
     /// Request a genetic algorithm optimization for Beijing air quality prediction
@@ -185,9 +187,10 @@ pub enum BeijingCommand {
         #[arg(long, required = true)]
         prediction_horizon: usize,
 
-        /// Target to predict including any preprocessing
-        #[arg(long, required = true)]
-        targets: String,
+        /// Target to predict including any preprocessing (can be specified multiple times)
+        /// Format: dest=source:NODE1 NODE2 ... or dest=source or dest=source:
+        #[arg(long = "target", required = true, value_parser = parse_transform)]
+        targets: Vec<Transform>,
     },
 }
 

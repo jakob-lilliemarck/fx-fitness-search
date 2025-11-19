@@ -15,6 +15,26 @@ pub struct TrainConfig {
 }
 
 impl TrainConfig {
+    pub fn new(
+        input_size: usize,
+        hidden_size: usize,
+        output_size: usize,
+        sequence_length: usize,
+        prediction_horizon: usize,
+        features: Vec<String>,
+        targets: Vec<String>,
+    ) -> Self {
+        Self {
+            input_size,
+            hidden_size,
+            output_size,
+            sequence_length,
+            prediction_horizon,
+            features,
+            targets,
+        }
+    }
+
     pub fn save(&self, path: &str) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         fs::write(path, json)?;

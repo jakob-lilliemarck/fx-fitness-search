@@ -3,8 +3,10 @@ use super::ingestion::build_dataset_from_file;
 use super::phenotype::BeijingPhenotype;
 use crate::core::dataset::SequenceDataset;
 use crate::core::model::{FeedForward, SequenceModel};
+use crate::core::preprocessor::Transform;
 use crate::core::preprocessor::{Cos, Node, Pipeline, Sin};
 use crate::core::train;
+use crate::core::train_config::TrainConfig;
 use burn::backend::ndarray::NdArrayDevice;
 use burn::backend::{Autodiff, NdArray};
 use burn::data::dataloader::Dataset;
@@ -29,11 +31,16 @@ impl BeijingEvaluator {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RequestVariables {
     prediction_horizon: usize,
-    targets: String,
+    targets: Vec<String>,
 }
 
 impl RequestVariables {
-    pub fn new(prediction_horizon: usize, targets: String) -> Self {
+    pub fn new(prediction_horizon: usize, targets: Vec<Transform>) -> Self {
+        let targets = targets
+            .iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<String>>();
+
         Self {
             prediction_horizon,
             targets,
@@ -55,15 +62,19 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
         request: &'a fx_durable_ga::models::Request,
         _terminated: &'a Box<dyn Terminated>,
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
-        // The request is the place where we should store prediction_horizon and targets (incl pipelines)
-        // It will be a json field on request - just deserialize it and use in this function.
-
         let model_save_path = self.model_save_path.clone();
 
         Box::pin(async move {
             let req_var: RequestVariables =
                 serde_json::from_value(request.data.clone().ok_or(EvaluationError::MissingData)?)?;
+
             tracing::info!(message = "Request data", req_var = ?req_var);
+            // FIXME
+            // At this point, we should be able to combine the phenotype and the request to create a TrainConfig
+            // The train config shall be passed to train, so it will be written to file.
+            // Then - as part of this refactor, I think it would be wise to also unify pipeline <-> string parsing. It seems we got an uneccessary level
+            // of indirection in phenotype.rs defining "Transform" and "Feature". I would much rather define a single unified way, probably in the preprocessor.rs file
+            // that handles the whole "dest=source:pipeline pipeline" syntax parsing.
 
             type Backend = Autodiff<NdArray>;
             let device = NdArrayDevice::default();
@@ -145,8 +156,23 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
             let train_dataset = SequenceDataset::from_items(all_train_items);
             let valid_dataset = SequenceDataset::from_items(all_valid_items);
 
-            // Create FeedForward model
             let input_size = 4 + phenotype.features().len();
+            let train_config = TrainConfig::new(
+                input_size,
+                phenotype.hidden_size,
+                targets.len(),
+                phenotype.sequence_length,
+                req_var.prediction_horizon,
+                features
+                    .iter()
+                    .map(|(dest, source, pipeline)| {
+                        format!("{}={}:{}", dest, source, pipeline.to_string())
+                    })
+                    .collect::<Vec<String>>(),
+                req_var.targets.iter().map(|t| t.to_string()).collect(),
+            );
+
+            // Create FeedForward model
             let model = FeedForward::<Backend>::new(
                 &device,
                 input_size,
@@ -168,7 +194,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 phenotype.learning_rate,
                 model,
                 Some(model_file_path), // model_save_path (don't save during GA optimization)
-                None,                  // train_config (don't save config during GA)
+                Some(train_config),    // train_config (don't save config during GA)
             )
             .await;
 

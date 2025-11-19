@@ -66,14 +66,14 @@ The server will start workers that process optimization jobs.
 
 **Quick Test (Small Scale):**
 ```bash
-cargo run --release --bin client -- beijing request-optimization \
+cargo run --bin client -- beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
   --schedule 'GENERATIONAL(10,30)' \
   --selector 'TOURNAMENT(3,7)' \
   --mutagen 'MUTAGEN(0.7,0.35)' \
   --initial-population 40 \
   --prediction-horizon 1 \
-  --targets 'temp=TEMP'
+  --targets 'temp=TEMP:STD(24) ROC(8)'
 ```
 
 **Standard Run (Medium Scale):**

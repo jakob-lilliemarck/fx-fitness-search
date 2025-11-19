@@ -1,6 +1,8 @@
 use std::f32::consts::PI;
 use std::{collections::VecDeque, fmt::Display};
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone)]
 pub struct Roc {
     offset: usize,
@@ -207,12 +209,15 @@ impl Display for Node {
     }
 }
 
+// Errors relating to string parsing
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Unknown node: {0}")]
     UnknownNode(String),
     #[error("Invalid value: {0}")]
     InvalidValue(String),
+    #[error("Malformed: {0}")]
+    Malformed(String),
 }
 
 impl TryFrom<&str> for Node {
@@ -350,7 +355,9 @@ impl Node {
     }
 }
 
-// A simple pipeline with two preprocessing steps
+// ============================================================
+// Pipeline - a chain of stateful operations on a f32
+// ============================================================
 #[derive(Debug, Clone)]
 pub struct Pipeline {
     pub(crate) nodes: Vec<Node>,
@@ -372,10 +379,78 @@ impl Pipeline {
     }
 }
 
+const DELIMITER_NODES: &str = " ";
+
 impl Display for Pipeline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let node_strs: Vec<String> = self.nodes.iter().map(|n| n.to_string()).collect();
-        write!(f, "{}", node_strs.join(" "))
+        write!(f, "{}", node_strs.join(DELIMITER_NODES))
+    }
+}
+
+impl TryFrom<&str> for Pipeline {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let nodes: Vec<Node> = value
+            .split(DELIMITER_NODES)
+            .map(Node::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Pipeline { nodes })
+    }
+}
+
+// ============================================================
+// Transform - a transfrom from a source key, through a
+// pipeline to a destination key
+// ============================================================
+const DELIMITER_KEYS: &str = "=";
+const DELIMITER_KEYS_PIPELINE: &str = ":";
+
+#[derive(Debug, Clone)]
+pub struct Transform {
+    destination: String,
+    source: String,
+    pipeline: Option<Pipeline>,
+}
+
+impl Display for Transform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = format!("{}={}", self.destination, self.source);
+
+        if let Some(ref pipeline) = self.pipeline {
+            s.push_str(DELIMITER_KEYS_PIPELINE);
+            s.push_str(&pipeline.to_string());
+        };
+
+        write!(f, "{}", s)
+    }
+}
+
+impl TryFrom<&str> for Transform {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let (destination, rest) = value
+            .split_once(DELIMITER_KEYS)
+            .ok_or_else(|| Error::Malformed("Missing '=' delimiter".to_string()))?;
+
+        let (source, pipeline_str) = rest
+            .split_once(DELIMITER_KEYS_PIPELINE)
+            .unwrap_or((rest, ""));
+
+        let pipeline = if !pipeline_str.is_empty() {
+            Some(Pipeline::try_from(pipeline_str)?)
+        } else {
+            None
+        };
+
+        Ok(Transform {
+            destination: destination.to_string(),
+            source: source.to_string(),
+            pipeline,
+        })
     }
 }
 
