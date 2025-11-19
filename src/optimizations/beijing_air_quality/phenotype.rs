@@ -15,7 +15,7 @@ const SEQUENCE_LENGTH_OPTIONS: &[usize] = &[10, 20, 30, 40, 50, 60, 70, 80, 90, 
 
 /// Transform variants that map genes to specific preprocessing operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-enum Transform {
+pub enum Transform {
     ZScore10,
     ZScore24,
     ZScore48,
@@ -87,9 +87,9 @@ impl Transform {
 
 /// A feature with its source column and preprocessing pipeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct Feature {
+pub struct Feature {
     pub(super) source: String,             // e.g., "TEMP", "PRES"
-    pub(super) transforms: Vec<Transform>, // Pipeline of transforms to apply
+    pub transforms: Vec<Transform>,        // Pipeline of transforms to apply
 }
 
 impl Feature {

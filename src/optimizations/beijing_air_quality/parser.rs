@@ -101,6 +101,7 @@ pub enum Station {
 // 2. Define polar coordinates or a vector for each station using the centroid
 //
 // consider to implement this as a stateful preprocessor instead. that way we could keep a cache of centroid and a lookup table
+#[allow(dead_code)]
 impl Station {
     // FIXME:
     /// Returns centroid of all stations as cartesian or LAT/LON coordinates
@@ -143,6 +144,7 @@ impl TryFrom<&str> for Station {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Row {
     pub no: u32,
     pub month: f32, // month of year

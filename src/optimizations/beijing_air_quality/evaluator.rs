@@ -79,44 +79,48 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
             type Backend = Autodiff<NdArray>;
             let device = NdArrayDevice::default();
 
-            // Build time features (always included)
+            // Build time features (always included) as Transform instances
             let mut features = vec![
-                (
-                    "hour_sin".to_string(),
-                    "hour".to_string(),
-                    Pipeline::new(vec![Node::Sin(Sin::new(24.0))]),
-                ),
-                (
-                    "hour_cos".to_string(),
-                    "hour".to_string(),
-                    Pipeline::new(vec![Node::Cos(Cos::new(24.0))]),
-                ),
-                (
-                    "month_sin".to_string(),
-                    "month".to_string(),
-                    Pipeline::new(vec![Node::Sin(Sin::new(12.0))]),
-                ),
-                (
-                    "month_cos".to_string(),
-                    "month".to_string(),
-                    Pipeline::new(vec![Node::Cos(Cos::new(12.0))]),
-                ),
+                Transform {
+                    destination: "hour_sin".to_string(),
+                    source: "hour".to_string(),
+                    pipeline: Pipeline::new(vec![Node::Sin(Sin::new(24.0))]),
+                },
+                Transform {
+                    destination: "hour_cos".to_string(),
+                    source: "hour".to_string(),
+                    pipeline: Pipeline::new(vec![Node::Cos(Cos::new(24.0))]),
+                },
+                Transform {
+                    destination: "month_sin".to_string(),
+                    source: "month".to_string(),
+                    pipeline: Pipeline::new(vec![Node::Sin(Sin::new(12.0))]),
+                },
+                Transform {
+                    destination: "month_cos".to_string(),
+                    source: "month".to_string(),
+                    pipeline: Pipeline::new(vec![Node::Cos(Cos::new(12.0))]),
+                },
             ];
 
-            // Convert phenotype features to feature definitions
+            // Convert phenotype features to Transform instances
             for (i, feat) in phenotype.features().iter().enumerate() {
-                let name = format!("feat_{}", i);
+                let destination = format!("feat_{}", i);
                 let source = feat.source.clone();
                 let pipeline = feat.to_pipeline();
-                features.push((name, source, pipeline));
+                features.push(Transform {
+                    destination,
+                    source,
+                    pipeline,
+                });
             }
 
             // Target definition (always TEMP with no preprocessing)
-            let targets = vec![(
-                "target_temp".to_string(),
-                "TEMP".to_string(),
-                Pipeline::new(vec![]),
-            )];
+            let targets = vec![Transform {
+                destination: "target_temp".to_string(),
+                source: "TEMP".to_string(),
+                pipeline: Pipeline::new(vec![]),
+            }];
 
             // Load data from all stations and combine into unified datasets
             let mut all_train_items = Vec::new();
@@ -165,9 +169,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 req_var.prediction_horizon,
                 features
                     .iter()
-                    .map(|(dest, source, pipeline)| {
-                        format!("{}={}:{}", dest, source, pipeline.to_string())
-                    })
+                    .map(|t| t.to_string())
                     .collect::<Vec<String>>(),
                 req_var.targets.iter().map(|t| t.to_string()).collect(),
             );

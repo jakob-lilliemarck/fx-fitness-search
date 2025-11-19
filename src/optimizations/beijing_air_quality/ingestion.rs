@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::core::{dataset::DatasetBuilder, preprocessor::Pipeline};
+use crate::core::preprocessor::Transform;
+use crate::core::dataset::DatasetBuilder;
 
 use super::parser::read_csv;
 
@@ -34,18 +35,18 @@ pub const PATHS: &[&str] = &[
 /// Build a DatasetBuilder from a CSV file
 pub fn build_dataset_from_file(
     path: &str,
-    features: &[(String, String, Pipeline)],
-    targets: &[(String, String, Pipeline)],
+    features: &[Transform],
+    targets: &[Transform],
 ) -> anyhow::Result<DatasetBuilder> {
     // Process features (clone pipelines for each file)
     let mut feature_pipelines = HashMap::with_capacity(features.len());
     let mut feature_output_names = Vec::with_capacity(features.len());
     let mut feature_source_columns = Vec::with_capacity(features.len());
 
-    for (output_name, source_column, pipeline) in features {
-        feature_pipelines.insert(output_name.clone(), pipeline.clone());
-        feature_output_names.push(output_name.clone());
-        feature_source_columns.push(source_column.clone());
+    for transform in features {
+        feature_pipelines.insert(transform.destination.clone(), transform.pipeline.clone());
+        feature_output_names.push(transform.destination.clone());
+        feature_source_columns.push(transform.source.clone());
     }
 
     // Process targets (clone pipelines for each file)
@@ -53,10 +54,10 @@ pub fn build_dataset_from_file(
     let mut target_output_names = Vec::with_capacity(targets.len());
     let mut target_source_columns = Vec::with_capacity(targets.len());
 
-    for (output_name, source_column, pipeline) in targets {
-        target_pipelines.insert(output_name.clone(), pipeline.clone());
-        target_output_names.push(output_name.clone());
-        target_source_columns.push(source_column.clone());
+    for transform in targets {
+        target_pipelines.insert(transform.destination.clone(), transform.pipeline.clone());
+        target_output_names.push(transform.destination.clone());
+        target_source_columns.push(transform.source.clone());
     }
 
     // Collect all unique source columns needed

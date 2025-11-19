@@ -19,10 +19,12 @@
 //! Expected speedup: ~35x (from 35k single forward passes → 1k batched forward passes).
 //! Tradeoff: Requires loading all preprocessed data into memory.
 
+#![allow(dead_code)]
+
 use super::ingestion::build_dataset_from_file;
 use crate::core::dataset::Metadata;
 use crate::core::inference::InferenceEngine;
-use crate::core::preprocessor::{Node, Pipeline};
+use crate::core::preprocessor::Transform;
 use burn::data::dataloader::Dataset;
 use burn::prelude::Backend;
 use std::fmt;
@@ -189,37 +191,15 @@ pub fn run_inference<B: Backend>(
     Ok(results)
 }
 
-/// Parse feature/target definitions back into (name, column, pipeline)
-fn parse_definitions(definitions: &[String]) -> anyhow::Result<Vec<(String, String, Pipeline)>> {
+/// Parse feature/target definitions back into Transform instances
+fn parse_definitions(definitions: &[String]) -> anyhow::Result<Vec<Transform>> {
     let mut result = Vec::new();
 
     for def in definitions {
-        let pos = def
-            .find('=')
-            .ok_or_else(|| anyhow::anyhow!("Invalid definition: no '=' found in '{}'", def))?;
-        let output_name = def[..pos].to_string();
-        let rest = &def[pos + 1..];
-
-        let (source_column, pipeline_str) = if let Some(colon_pos) = rest.find(':') {
-            (rest[..colon_pos].to_string(), &rest[colon_pos + 1..])
-        } else {
-            (rest.to_string(), "")
-        };
-
-        // Parse pipeline
-        let nodes: Vec<Node> = if pipeline_str.trim().is_empty() {
-            vec![]
-        } else {
-            pipeline_str
-                .split_whitespace()
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|s| Node::try_from(s))
-                .collect::<Result<Vec<_>, _>>()?
-        };
-
-        let pipeline = Pipeline::new(nodes);
-        result.push((output_name, source_column, pipeline));
+        // Use Transform::try_from for consistent parsing
+        let transform = Transform::try_from(def.as_str())
+            .map_err(|e| anyhow::anyhow!("Invalid transform definition '{}': {}", def, e))?;
+        result.push(transform);
     }
 
     Ok(result)

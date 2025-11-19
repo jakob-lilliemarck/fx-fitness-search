@@ -1,8 +1,6 @@
 use std::f32::consts::PI;
 use std::{collections::VecDeque, fmt::Display};
 
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone)]
 pub struct Roc {
     offset: usize,
@@ -308,11 +306,11 @@ impl TryFrom<&str> for Node {
 
                 let window = parts[0]
                     .parse::<usize>()
-                    .map_err(|_| Error::InvalidValue(format!("Invalid window: {}", parts[0])))?;
+                    .map_err(|_| Error::InvalidValue(format!("Invalid window: '{}'", parts[0])))?;
 
                 let alpha = parts[1]
                     .parse::<f32>()
-                    .map_err(|_| Error::InvalidValue(format!("Invalid alpha: {}", parts[1])))?;
+                    .map_err(|_| Error::InvalidValue(format!("Invalid alpha: '{}' (from params: '{}')", parts[1], params)))?;
 
                 if window < 1 {
                     return Err(Error::InvalidValue(format!(
@@ -388,15 +386,53 @@ impl Display for Pipeline {
     }
 }
 
+/// Parse space-separated nodes, respecting parentheses (e.g., "STD(24) ROC(8)" or "EMA(5, 0.1)")
+fn parse_node_list(value: &str) -> Result<Vec<Node>, Error> {
+    let mut nodes = Vec::new();
+    let mut chars = value.chars().peekable();
+    let mut current_node = String::new();
+    let mut paren_depth = 0;
+
+    while let Some(&ch) = chars.peek() {
+        match ch {
+            '(' => {
+                paren_depth += 1;
+                current_node.push(ch);
+                chars.next();
+            }
+            ')' => {
+                paren_depth -= 1;
+                current_node.push(ch);
+                chars.next();
+            }
+            c if c.is_whitespace() && paren_depth == 0 => {
+                // Whitespace outside parentheses: end of current node
+                if !current_node.trim().is_empty() {
+                    nodes.push(Node::try_from(current_node.trim())?);
+                    current_node.clear();
+                }
+                chars.next();
+            }
+            _ => {
+                current_node.push(ch);
+                chars.next();
+            }
+        }
+    }
+
+    // Don't forget the last node
+    if !current_node.trim().is_empty() {
+        nodes.push(Node::try_from(current_node.trim())?);
+    }
+
+    Ok(nodes)
+}
+
 impl TryFrom<&str> for Pipeline {
     type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let nodes: Vec<Node> = value
-            .split(DELIMITER_NODES)
-            .map(Node::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
-
+        let nodes = parse_node_list(value)?;
         Ok(Pipeline { nodes })
     }
 }
@@ -410,18 +446,18 @@ const DELIMITER_KEYS_PIPELINE: &str = ":";
 
 #[derive(Debug, Clone)]
 pub struct Transform {
-    destination: String,
-    source: String,
-    pipeline: Option<Pipeline>,
+    pub destination: String,
+    pub source: String,
+    pub pipeline: Pipeline,
 }
 
 impl Display for Transform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = format!("{}={}", self.destination, self.source);
 
-        if let Some(ref pipeline) = self.pipeline {
+        if !self.pipeline.nodes.is_empty() {
             s.push_str(DELIMITER_KEYS_PIPELINE);
-            s.push_str(&pipeline.to_string());
+            s.push_str(&self.pipeline.to_string());
         };
 
         write!(f, "{}", s)
@@ -435,15 +471,18 @@ impl TryFrom<&str> for Transform {
         let (destination, rest) = value
             .split_once(DELIMITER_KEYS)
             .ok_or_else(|| Error::Malformed("Missing '=' delimiter".to_string()))?;
+        let destination = destination.trim();
 
         let (source, pipeline_str) = rest
             .split_once(DELIMITER_KEYS_PIPELINE)
             .unwrap_or((rest, ""));
+        let source = source.trim();
+        let pipeline_str = pipeline_str.trim();
 
         let pipeline = if !pipeline_str.is_empty() {
-            Some(Pipeline::try_from(pipeline_str)?)
+            Pipeline::try_from(pipeline_str)?
         } else {
-            None
+            Pipeline::new(vec![])
         };
 
         Ok(Transform {

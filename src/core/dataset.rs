@@ -7,10 +7,12 @@ use std::path::Path;
 
 pub type Timestep = Vec<f32>;
 pub type RecordID = String;
+#[allow(dead_code)]
 pub type ColumnID = String;
 
 /// Metadata about the source rows for a sequence item
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Metadata {
     pub sequence_start_row_id: String, // CSV row identifier of first sequence timestep
     pub sequence_end_row_id: String,   // CSV row identifier of last sequence timestep (anchor)
@@ -199,6 +201,7 @@ impl DatasetBuilder {
     }
 
     /// Dump the dataset to a CSV file
+    #[allow(dead_code)]
     pub fn to_csv<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let mut file = File::create(path)?;
 

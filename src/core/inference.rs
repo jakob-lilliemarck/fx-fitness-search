@@ -12,6 +12,7 @@ pub struct InferenceEngine<B: Backend> {
     device: B::Device,
 }
 
+#[allow(dead_code)]
 impl<B: Backend> InferenceEngine<B> {
     /// Load model and config from disk
     pub fn load(model_path: &str, device: &B::Device) -> anyhow::Result<Self> {

@@ -41,6 +41,7 @@ impl TrainConfig {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn load(path: &str) -> anyhow::Result<Self> {
         let json = fs::read_to_string(path)?;
         let config = serde_json::from_str(&json)?;
