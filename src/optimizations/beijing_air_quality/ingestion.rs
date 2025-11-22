@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-
-use crate::core::preprocessor::Transform;
 use crate::core::dataset::DatasetBuilder;
+use crate::core::ingestion::{self, Csv, Ingestable, ManySequences, Pipeline};
+use crate::core::preprocessor::Transform;
+use std::collections::HashMap;
 
 use super::parser::read_csv;
 
@@ -124,4 +124,32 @@ pub fn build_dataset_from_file(
     }
 
     Ok(dataset_builder)
+}
+
+pub async fn ingest(
+    feature_pipelines: Vec<Pipeline>,
+    target_pipelines: Vec<Pipeline>,
+) -> anyhow::Result<ManySequences> {
+    let mut set = tokio::task::JoinSet::new();
+
+    for path in PATHS {
+        let pipelines_f = feature_pipelines.clone();
+        let pipelines_t = target_pipelines.clone();
+        let path = path.to_string();
+        set.spawn(async move {
+            let mut ingestable = Csv::new(path, pipelines_f, pipelines_t);
+            ingestable.ingest()
+        });
+    }
+
+    let mut sequences = Vec::new();
+    while let Some(result) = set.join_next().await {
+        match result {
+            Ok(Ok(sequence)) => sequences.push(sequence),
+            Ok(Err(e)) => return Err(e.into()),
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    Ok(ManySequences::new(sequences))
 }

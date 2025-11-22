@@ -68,12 +68,12 @@ The server will start workers that process optimization jobs.
 ```bash
 cargo run --bin client -- beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(10,30)' \
-  --selector 'TOURNAMENT(3,7)' \
-  --mutagen 'MUTAGEN(0.7,0.35)' \
-  --initial-population 40 \
+  --schedule 'GENERATIONAL(100, 10)' \
+  --selector 'TOURNAMENT(3, 10)' \
+  --mutagen 'MUTAGEN(0.7, 0.4)' \
+  --initial-population 50 \
   --prediction-horizon 1 \
-  --target 'temp=TEMP:STD(24) ROC(8)'
+  --target 'temp=TEMP'
 ```
 
 **Standard Run (Medium Scale):**

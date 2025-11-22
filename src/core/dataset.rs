@@ -226,7 +226,7 @@ impl DatasetBuilder {
 
 #[derive(Clone)]
 pub struct SequenceDatasetItem {
-    pub sequence: Vec<Timestep>,
+    pub features: Vec<Timestep>,
     pub target: Timestep,
 }
 
@@ -268,7 +268,13 @@ impl SequenceDataset {
             let sequence = features[index..index + sequence_length].to_vec();
             let target = targets[target_index].clone();
 
-            items.push((metadata, SequenceDatasetItem { sequence, target }));
+            items.push((
+                metadata,
+                SequenceDatasetItem {
+                    features: sequence,
+                    target,
+                },
+            ));
         }
 
         Self { items }
@@ -405,17 +411,17 @@ mod tests {
 
         // First item: sequence=[[1,2], [3,4]], target=[20]
         let item0 = dataset.get(0).unwrap();
-        assert_eq!(item0.sequence, vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
+        assert_eq!(item0.features, vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
         assert_eq!(item0.target, vec![20.0]);
 
         // Second item: sequence=[[3,4], [5,6]], target=[30]
         let item1 = dataset.get(1).unwrap();
-        assert_eq!(item1.sequence, vec![vec![3.0, 4.0], vec![5.0, 6.0]]);
+        assert_eq!(item1.features, vec![vec![3.0, 4.0], vec![5.0, 6.0]]);
         assert_eq!(item1.target, vec![30.0]);
 
         // Third item: sequence=[[5,6], [7,8]], target=[40]
         let item2 = dataset.get(2).unwrap();
-        assert_eq!(item2.sequence, vec![vec![5.0, 6.0], vec![7.0, 8.0]]);
+        assert_eq!(item2.features, vec![vec![5.0, 6.0], vec![7.0, 8.0]]);
         assert_eq!(item2.target, vec![40.0]);
     }
 
@@ -428,7 +434,7 @@ mod tests {
         let item = ds.get(0).expect("item 0 exists");
         let md = ds.get_metadata(0).expect("metadata 0 exists");
 
-        assert_eq!(item.sequence, vec![vec![1.0], vec![2.0], vec![3.0]]);
+        assert_eq!(item.features, vec![vec![1.0], vec![2.0], vec![3.0]]);
         assert_eq!(item.target, vec![40.0]); // 4th target value (index 3) = 40
 
         // Metadata row numbers (1-based to match data indices)
@@ -448,7 +454,7 @@ mod tests {
         let item = ds.get(1).expect("item 1 exists");
         let md = ds.get_metadata(1).expect("metadata 1 exists");
 
-        assert_eq!(item.sequence, vec![vec![2.0], vec![3.0], vec![4.0]]);
+        assert_eq!(item.features, vec![vec![2.0], vec![3.0], vec![4.0]]);
         assert_eq!(item.target, vec![50.0]);
 
         assert_eq!(md.sequence_start_row_id, "2");
@@ -467,7 +473,7 @@ mod tests {
         let item = ds.get(0).expect("item 0 exists");
         let md = ds.get_metadata(0).expect("metadata 0 exists");
 
-        assert_eq!(item.sequence, vec![vec![1.0], vec![2.0], vec![3.0]]);
+        assert_eq!(item.features, vec![vec![1.0], vec![2.0], vec![3.0]]);
         assert_eq!(item.target, vec![60.0]);
 
         assert_eq!(md.sequence_start_row_id, "1");

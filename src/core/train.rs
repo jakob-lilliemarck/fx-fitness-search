@@ -28,7 +28,6 @@ where
     M: SequenceModel<B> + AutodiffModule<B>,
     M::InnerModule: SequenceModel<B::InnerBackend>,
 {
-
     // Initialize optimizer
     let mut optimizer = AdamConfig::new()
         .with_weight_decay(Some(WeightDecayConfig::new(5e-4)))
@@ -235,7 +234,7 @@ mod tests {
         let model = SimpleLstm::<Backend>::new(&device, 1, 64, 1, 4);
 
         // Train
-        train(
+        train_sync(
             &device,
             &dataset_train,
             &dataset_valid,
@@ -245,8 +244,7 @@ mod tests {
             model,
             None,
             None,
-        )
-        .await;
+        );
 
         println!("Training complete! Check if losses decreased.");
     }

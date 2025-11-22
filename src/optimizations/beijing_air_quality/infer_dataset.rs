@@ -133,7 +133,7 @@ pub fn run_inference<B: Backend>(
         let prediction_naive = metadata.target_at_sequence_end.clone();
 
         // Make prediction
-        match engine.predict(item.sequence) {
+        match engine.predict(item.features) {
             Ok(prediction) => {
                 // Calculate distance metrics
                 let dist_baseline: Vec<f32> = item

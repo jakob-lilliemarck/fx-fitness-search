@@ -2,9 +2,11 @@ use burn::data::dataloader::Dataset;
 use fx_durable_ga_app::core::model::{FeedForward, SequenceModel};
 use fx_durable_ga_app::core::preprocessor::Transform;
 use fx_durable_ga_app::core::train_config::TrainConfig;
+use fx_durable_ga_app::optimizations::beijing_air_quality::ingestion::{
+    build_dataset_from_file, ingest,
+};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
-use fx_durable_ga_app::optimizations::beijing_air_quality::ingestion::build_dataset_from_file;
 #[derive(Debug, Deserialize)]
 struct TrainRequest {
     /// The configuration for this training run
@@ -32,14 +34,15 @@ struct TrainResponse {
     genotype_id: String,
 }
 
-fn main() {
-    if let Err(e) = run() {
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run().await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
 }
 
-fn run() -> anyhow::Result<()> {
+async fn run() -> anyhow::Result<()> {
     // Read request from stdin
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
@@ -72,6 +75,16 @@ fn run() -> anyhow::Result<()> {
         })
         .collect();
     let targets = targets?;
+
+    // ============================================================
+    // FIXME:
+    // This is the new way of ingesting
+    // Just pass feature and target pipelines
+    // ============================================================
+    let dataset = ingest(vec![], vec![]).await?;
+    // ============================================================
+    // ENDOF
+    // ============================================================
 
     // Build datasets from all files
     let mut all_train_items = Vec::new();
@@ -163,4 +176,3 @@ fn run() -> anyhow::Result<()> {
 
     Ok(())
 }
-

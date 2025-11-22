@@ -1,3 +1,4 @@
+use crate::core::ingestion;
 use std::f32::consts::PI;
 use std::{collections::VecDeque, fmt::Display};
 
@@ -15,8 +16,8 @@ impl Roc {
         }
     }
 
-    fn process(&mut self, value: f32) -> Option<f32> {
-        self.buffer.push_back(value);
+    fn process(&mut self, input: f32) -> Option<f32> {
+        self.buffer.push_back(input);
 
         // Keep only the values we need
         if self.buffer.len() > self.offset + 1 {
@@ -25,7 +26,7 @@ impl Roc {
 
         // Need at least offset+1 values to compute ROC
         if self.buffer.len() > self.offset {
-            Some((value - self.buffer[0]) / self.offset as f32)
+            Some((input - self.buffer[0]) / self.offset as f32)
         } else {
             None
         }
@@ -308,9 +309,12 @@ impl TryFrom<&str> for Node {
                     .parse::<usize>()
                     .map_err(|_| Error::InvalidValue(format!("Invalid window: '{}'", parts[0])))?;
 
-                let alpha = parts[1]
-                    .parse::<f32>()
-                    .map_err(|_| Error::InvalidValue(format!("Invalid alpha: '{}' (from params: '{}')", parts[1], params)))?;
+                let alpha = parts[1].parse::<f32>().map_err(|_| {
+                    Error::InvalidValue(format!(
+                        "Invalid alpha: '{}' (from params: '{}')",
+                        parts[1], params
+                    ))
+                })?;
 
                 if window < 1 {
                     return Err(Error::InvalidValue(format!(
@@ -350,6 +354,16 @@ impl Node {
             Self::Ema(ema) => ema.process(value),
             Self::ZScore(zscore) => zscore.process(value),
         }
+    }
+}
+
+impl ingestion::Process for Node {
+    fn process(&mut self, input: f32) -> Option<f32> {
+        self.process(input)
+    }
+
+    fn clone_box(&self) -> Box<dyn ingestion::Process> {
+        Box::new(self.clone())
     }
 }
 

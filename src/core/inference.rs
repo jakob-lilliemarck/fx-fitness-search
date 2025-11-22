@@ -48,7 +48,7 @@ impl<B: Backend> InferenceEngine<B> {
     pub fn predict(&self, sequence: Vec<Timestep>) -> anyhow::Result<Vec<f32>> {
         // Create SequenceDatasetItem from sequence
         let item = SequenceDatasetItem {
-            sequence,
+            features: sequence,
             target: vec![0.0; self.config.output_size], // Placeholder, not used in inference
         };
 
