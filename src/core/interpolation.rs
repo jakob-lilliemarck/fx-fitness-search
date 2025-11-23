@@ -61,7 +61,12 @@ impl LinearInterpolator {
             return Some(value);
         }
 
-        // Not enough history
+        // If we have exactly one value, return it (use previous value for gap)
+        if self.prev_values.len() == 1 {
+            return self.prev_values.back().copied();
+        }
+
+        // Need at least 2 points to fit a line
         if self.prev_values.len() < 2 {
             return None;
         }

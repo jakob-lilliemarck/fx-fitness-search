@@ -63,9 +63,6 @@ mod tests {
         ];
 
         let result = ingest(feature_pipelines, target_pipelines).await;
-        if let Err(e) = &result {
-            eprintln!("Error: {:?}", e);
-        }
         assert!(result.is_ok());
 
         let sequences = result.unwrap();
