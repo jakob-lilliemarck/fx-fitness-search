@@ -236,7 +236,7 @@ impl Cast for BeijingCast {
             .map(|s| WindDirection::try_from(s.as_str()))
             .transpose()?
         {
-            cast.insert("wind_direction".to_string(), value.into());
+            cast.insert("wd".to_string(), value.into());
         }
 
         Ok(cast)

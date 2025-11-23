@@ -1,4 +1,8 @@
-use crate::core::{dataset::Metadata, interpolation::Interpolation, preprocessor::Node};
+use crate::core::{
+    dataset::{Metadata, SequenceDatasetItem},
+    interpolation::Interpolation,
+    preprocessor::Node,
+};
 use burn::data::dataset::Dataset;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -341,12 +345,30 @@ pub struct ManySequencesAdapter {
     sequence_length: usize,
 }
 
-impl Dataset<(Vec<Vec<f32>>, Vec<f32>)> for ManySequencesAdapter {
-    fn get(&self, index: usize) -> Option<(Vec<Vec<f32>>, Vec<f32>)> {
+impl ManySequencesAdapter {
+    pub fn new(
+        many_sequences: ManySequences,
+        prediction_horizon: usize,
+        sequence_length: usize,
+    ) -> Self {
+        Self {
+            many_sequences,
+            prediction_horizon,
+            sequence_length,
+        }
+    }
+}
+
+impl Dataset<SequenceDatasetItem> for ManySequencesAdapter {
+    fn get(&self, index: usize) -> Option<SequenceDatasetItem> {
         let (features, target) =
             self.many_sequences
                 .get_item(index, self.sequence_length, self.prediction_horizon)?;
-        Some((features.to_vec(), target.clone()))
+
+        Some(SequenceDatasetItem {
+            features: features.to_vec(),
+            target: target.clone(),
+        })
     }
 
     fn len(&self) -> usize {

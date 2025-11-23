@@ -1,3 +1,5 @@
+use crate::core::dataset::SequenceDatasetItem;
+
 use super::batcher::SequenceBatcher;
 use super::dataset::SequenceDataset;
 use super::model::SequenceModel;
@@ -14,8 +16,8 @@ use burn::tensor::backend::AutodiffBackend;
 
 pub fn train_sync<B, M>(
     device: &B::Device,
-    dataset_training: &SequenceDataset,
-    dataset_validation: &SequenceDataset,
+    dataset_training: &impl Dataset<SequenceDatasetItem>,
+    dataset_validation: &impl Dataset<SequenceDatasetItem>,
     epochs: usize,
     batch_size: usize,
     learning_rate: f64,
