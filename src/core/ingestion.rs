@@ -311,8 +311,6 @@ impl ManySequences {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::preprocessor::{Cos, Node, Sin};
-
     use super::*;
     use chrono::{Datelike, NaiveDate};
     use std::fs::File;
@@ -346,6 +344,13 @@ mod tests {
 
             cast.insert("dow".to_string(), dow);
 
+            if let Some(value) = input.get("Value") {
+                let v = value
+                    .parse::<f32>()
+                    .map_err(|err| Error::CastingError(Box::new(err)))?;
+                cast.insert("Value".to_string(), v);
+            }
+
             Ok(cast)
         }
 
@@ -366,10 +371,7 @@ mod tests {
         let mut csv = Csv {
             path: csv_path.to_string(),
             cast: Box::new(ExampleCast),
-            feature_pipelines: vec![
-                Extract::new("dow").with_node(Node::Cos(Cos::new(7.0))),
-                Extract::new("dow").with_node(Node::Sin(Sin::new(7.0))),
-            ],
+            feature_pipelines: vec![Extract::new("dow")],
             target_pipelines: vec![Extract::new("dow")],
         };
 
@@ -378,7 +380,9 @@ mod tests {
 
         let (features, target) = sequence.get_item(0, 1, 0).unwrap();
         assert_eq!(features.len(), 1);
-        assert_eq!(features[0][0], 2.0); // Wednesday (day 1 in 0-indexed)
-        assert_eq!(target[0], 3.0); // Thursday
+        // First row: 2025-01-15 is Wednesday (dow=2)
+        assert_eq!(features[0][0], 2.0);
+        // Target with prediction_horizon=0 is at the same position: Wednesday (dow=2)
+        assert_eq!(target[0], 2.0);
     }
 }
