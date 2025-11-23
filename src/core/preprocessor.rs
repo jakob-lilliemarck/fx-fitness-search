@@ -4,7 +4,7 @@ use std::{collections::VecDeque, fmt::Display};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Roc {
-    offset: usize,
+    pub offset: usize,
     #[serde(skip, default)]
     buffer: VecDeque<f32>,
 }
@@ -110,7 +110,7 @@ impl Ema {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Std {
-    window: usize,
+    pub window: usize,
     #[serde(skip, default)]
     buffer: VecDeque<f32>,
 }

@@ -162,7 +162,14 @@ where
         .get(column)
         .ok_or(Error::NotFound(column.to_string()))?;
 
-    s.trim().parse::<T>().map_err(|err| Error::Parse {
+    let trimmed = s.trim();
+
+    // Treat "NA" as missing data
+    if trimmed.eq_ignore_ascii_case("NA") {
+        return Err(Error::NotFound(format!("{} has NA value", column)));
+    }
+
+    trimmed.parse::<T>().map_err(|err| Error::Parse {
         source: Box::new(err),
         got: s.to_string(),
     })
@@ -180,7 +187,14 @@ where
         None => return Ok(None),
     };
 
-    s.trim()
+    let trimmed = s.trim();
+
+    // Treat "NA" as missing data
+    if trimmed.eq_ignore_ascii_case("NA") {
+        return Ok(None);
+    }
+
+    trimmed
         .parse::<T>()
         .map(Option::Some)
         .map_err(|err| Error::Parse {
@@ -212,10 +226,10 @@ impl Cast for BeijingCast {
         let mut cast = HashMap::with_capacity(15);
 
         // Extract and extrapolare all time related columns
-        let y = extract_required::<i32>("Year", input)?;
-        let m = extract_required::<u32>("Month", input)?;
-        let d = extract_required::<u32>("Day", input)?;
-        let h = extract_required::<u32>("Hour", input)?;
+        let y = extract_required::<i32>("year", input)?;
+        let m = extract_required::<u32>("month", input)?;
+        let d = extract_required::<u32>("day", input)?;
+        let h = extract_required::<u32>("hour", input)?;
         let day_of_week = NaiveDate::from_ymd_opt(y, m, d)
             .map(|dt| dt.weekday().number_from_monday() - 1)
             .ok_or_else(|| ingestion::Error::NotEnoughHistory("Invalid date".into()))?;
@@ -231,12 +245,14 @@ impl Cast for BeijingCast {
         }
 
         // Extract, cast and insert wind direction
-        if let Some(value) = input
-            .get("wd")
-            .map(|s| WindDirection::try_from(s.as_str()))
-            .transpose()?
-        {
-            cast.insert("wd".to_string(), value.into());
+        if let Some(wd_str) = input.get("wd") {
+            let trimmed = wd_str.trim();
+            // Only try to parse if not NA
+            if !trimmed.eq_ignore_ascii_case("NA") {
+                if let Some(value) = WindDirection::try_from(trimmed).ok() {
+                    cast.insert("wd".to_string(), value.into());
+                }
+            }
         }
 
         Ok(cast)
@@ -244,5 +260,70 @@ impl Cast for BeijingCast {
 
     fn clone_box(&self) -> Box<dyn Cast> {
         Box::new(self.clone())
+    }
+}
+
+pub enum Optimizable {
+    Pm25,
+    Pm10,
+    So2,
+    No2,
+    Co,
+    O3,
+    Temp,
+    Pres,
+    Dewp,
+    Rain,
+    Wspm,
+    Wd,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum OptimizableError {
+    #[error("Unknown optimizable key: '{0}'")]
+    Unknown(String),
+}
+
+impl TryFrom<&str> for Optimizable {
+    type Error = OptimizableError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "PM2.5" => Ok(Optimizable::Pm25),
+            "PM10" => Ok(Optimizable::Pm10),
+            "SO2" => Ok(Optimizable::So2),
+            "NO2" => Ok(Optimizable::No2),
+            "CO" => Ok(Optimizable::Co),
+            "O3" => Ok(Optimizable::O3),
+            "TEMP" => Ok(Optimizable::Temp),
+            "PRES" => Ok(Optimizable::Pres),
+            "DEWP" => Ok(Optimizable::Dewp),
+            "RAIN" => Ok(Optimizable::Rain),
+            "WSPM" => Ok(Optimizable::Wspm),
+            "wd" => Ok(Optimizable::Wd),
+            _ => Err(OptimizableError::Unknown(value.to_string())),
+        }
+    }
+}
+
+use std::fmt;
+
+impl fmt::Display for Optimizable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Optimizable::Pm25 => "PM2.5",
+            Optimizable::Pm10 => "PM10",
+            Optimizable::So2 => "SO2",
+            Optimizable::No2 => "NO2",
+            Optimizable::Co => "CO",
+            Optimizable::O3 => "O3",
+            Optimizable::Temp => "TEMP",
+            Optimizable::Pres => "PRES",
+            Optimizable::Dewp => "DEWP",
+            Optimizable::Rain => "RAIN",
+            Optimizable::Wspm => "WSPM",
+            Optimizable::Wd => "wd",
+        };
+        write!(f, "{}", s)
     }
 }

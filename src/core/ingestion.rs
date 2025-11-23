@@ -1,9 +1,4 @@
-use crate::core::{
-    dataset::{Metadata, SequenceDatasetItem},
-    interpolation::Interpolation,
-    preprocessor::Node,
-};
-use burn::data::dataset::Dataset;
+use crate::core::{interpolation::Interpolation, preprocessor::Node};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -17,11 +12,11 @@ pub enum Error {
     NoneAfterSaturation,
     #[error("Factor out of bounds")]
     FactorOutOfBounds,
-    #[error("CastingError")]
+    #[error("CastingError: {0}")]
     CastingError(Box<dyn std::error::Error + Send + Sync>),
-    #[error("InterpolationError")]
+    #[error("InterpolationError: {0}")]
     InterpolationError(Box<dyn std::error::Error + Send + Sync>),
-    #[error("ProcessingError")]
+    #[error("ProcessingError: {0}")]
     ProcessingError(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -35,17 +30,15 @@ pub trait Cast: Send {
 // Values occupy the position at which point they were tranformed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Extract {
-    source: String,
-    description: String,
-    interpolation: Interpolation,
-    nodes: Vec<Node>,
+    pub source: String,
+    pub interpolation: Interpolation,
+    pub nodes: Vec<Node>,
 }
 
 impl Extract {
-    pub fn new(source: &str, description: &str) -> Self {
+    pub fn new(source: &str) -> Self {
         Self {
             source: source.to_string(),
-            description: description.to_string(),
             interpolation: Interpolation::Error,
             nodes: Vec::new(),
         }
@@ -64,7 +57,6 @@ impl Extract {
 
 pub trait Ingestable {
     fn ingest(&mut self) -> Result<Sequence, Error>;
-    fn descriptions(&self) -> Vec<String>;
 }
 
 pub struct Csv {
@@ -95,7 +87,11 @@ impl Csv {
         for t in t.iter_mut() {
             let input = r.get(&t.source).map(Clone::clone);
 
-            let mut output = t.interpolation.interpolate(input)?;
+            let mut output = t.interpolation.interpolate(input).map_err(|e| {
+                Error::InterpolationError(
+                    format!("Failed to interpolate '{}': {}", t.source, e).into(),
+                )
+            })?;
 
             for processor in &mut t.nodes {
                 output = output.and_then(|v| processor.process(v));
@@ -117,13 +113,6 @@ impl Csv {
 }
 
 impl Ingestable for Csv {
-    fn descriptions(&self) -> Vec<String> {
-        self.feature_pipelines
-            .iter()
-            .map(|p| p.description.to_string())
-            .collect::<Vec<String>>()
-    }
-
     fn ingest(&mut self) -> Result<Sequence, Error> {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(true)
@@ -218,25 +207,6 @@ impl Sequence {
         };
 
         Ok((train, validation))
-    }
-
-    pub fn get_metadata(
-        &self,
-        index: usize,
-        sequence_length: usize,
-        prediction_horizon: usize,
-    ) -> Option<Metadata> {
-        let (index, until_idx, target_idx) =
-            self.in_bounds(index, sequence_length, prediction_horizon)?;
-
-        let target = self.targets[target_idx].clone();
-
-        Some(Metadata {
-            sequence_start_row_id: index.to_string(),
-            sequence_end_row_id: until_idx.to_string(),
-            target_row_id: target_idx.to_string(),
-            target_at_sequence_end: target,
-        })
     }
 
     fn in_bounds(
@@ -339,44 +309,6 @@ impl ManySequences {
     }
 }
 
-pub struct ManySequencesAdapter {
-    many_sequences: ManySequences,
-    prediction_horizon: usize,
-    sequence_length: usize,
-}
-
-impl ManySequencesAdapter {
-    pub fn new(
-        many_sequences: ManySequences,
-        prediction_horizon: usize,
-        sequence_length: usize,
-    ) -> Self {
-        Self {
-            many_sequences,
-            prediction_horizon,
-            sequence_length,
-        }
-    }
-}
-
-impl Dataset<SequenceDatasetItem> for ManySequencesAdapter {
-    fn get(&self, index: usize) -> Option<SequenceDatasetItem> {
-        let (features, target) =
-            self.many_sequences
-                .get_item(index, self.sequence_length, self.prediction_horizon)?;
-
-        Some(SequenceDatasetItem {
-            features: features.to_vec(),
-            target: target.clone(),
-        })
-    }
-
-    fn len(&self) -> usize {
-        self.many_sequences
-            .len(self.sequence_length, self.prediction_horizon)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::core::preprocessor::{Cos, Node, Sin};
@@ -435,16 +367,13 @@ mod tests {
             path: csv_path.to_string(),
             cast: Box::new(ExampleCast),
             feature_pipelines: vec![
-                Extract::new("dow", "Cosine transform for day of week")
-                    .with_node(Node::Cos(Cos::new(7.0))),
-                Extract::new("dow", "Sine transform for day of week")
-                    .with_node(Node::Sin(Sin::new(7.0))),
+                Extract::new("dow").with_node(Node::Cos(Cos::new(7.0))),
+                Extract::new("dow").with_node(Node::Sin(Sin::new(7.0))),
             ],
-            target_pipelines: vec![Extract::new("dow", "Day of week")],
+            target_pipelines: vec![Extract::new("dow")],
         };
 
         let sequence = csv.ingest().unwrap();
-        assert_eq!(csv.descriptions(), vec!["day_of_week"]);
         assert_eq!(sequence.count, 3);
 
         let (features, target) = sequence.get_item(0, 1, 0).unwrap();

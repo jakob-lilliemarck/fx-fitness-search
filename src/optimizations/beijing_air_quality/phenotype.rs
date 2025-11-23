@@ -1,190 +1,421 @@
-use super::ingestion::SOURCE_COLUMNS;
-use crate::core::preprocessor::{Node, Pipeline, Roc, Std, ZScore};
-use fx_durable_ga::models::{Encodeable, GeneBounds};
-use serde::{Deserialize, Serialize};
+use crate::core::ingestion::Extract;
+use crate::core::interpolation::{Interpolation, LinearInterpolator};
+use crate::core::preprocessor::{Node, Roc, Std, ZScore};
+use crate::optimizations::beijing_air_quality::cast::{Optimizable, OptimizableError};
+use fx_durable_ga::models::{Encodeable, GeneBoundError, GeneBounds};
 
-// Constants for gene bounds
-const FEATURE_COUNT: usize = 7;
-const SOURCE_COLUMN_COUNT: usize = 15; // Length of SOURCE_COLUMNS
-const MAX_PIPELINE_LENGTH: usize = 2; // Max transforms per feature
-const TRANSFORM_COUNT: usize = 12; // Number of Transform enum variants
-
-const HIDDEN_SIZE_OPTIONS: &[usize] = &[4, 8, 16, 32, 64, 128];
-const LEARNING_RATE_OPTIONS: &[f64] = &[1e-4, 5e-4, 1e-3];
-const SEQUENCE_LENGTH_OPTIONS: &[usize] = &[10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-
-/// Transform variants that map genes to specific preprocessing operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Transform {
-    ZScore10,
-    ZScore24,
-    ZScore48,
-    ZScore96,
-    Roc1,
-    Roc4,
-    Roc8,
-    Roc12,
-    Std10,
-    Std24,
-    Std48,
-    Std96,
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("DecodeError: {0}")]
+    Decode(String),
+    #[error("EncodeError: {0}")]
+    Encode(String),
+    #[error("MorphologyError: {0}")]
+    Morphology(#[from] GeneBoundError),
 }
 
-impl Transform {
-    fn from_gene(gene: i64) -> Option<Self> {
-        match gene {
-            0 => Some(Self::ZScore10),
-            1 => Some(Self::ZScore24),
-            2 => Some(Self::ZScore48),
-            3 => Some(Self::ZScore96),
-            4 => Some(Self::Roc1),
-            5 => Some(Self::Roc4),
-            6 => Some(Self::Roc8),
-            7 => Some(Self::Roc12),
-            8 => Some(Self::Std10),
-            9 => Some(Self::Std24),
-            10 => Some(Self::Std48),
-            11 => Some(Self::Std96),
-            _ => None,
+pub trait Genotype {
+    type Phenotype;
+
+    fn encode(&self) -> Result<Vec<i64>, Error>;
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error>;
+    fn morphology() -> Result<Vec<GeneBounds>, Error>;
+}
+
+impl Genotype for Node {
+    type Phenotype = Node;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let lower = 0;
+        let upper = 11;
+        let steps = 12;
+        let bounds = GeneBounds::integer(lower, upper, steps)?;
+        Ok(vec![bounds])
+    }
+
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let gene = match self {
+            Node::ZScore(z) => match z.window {
+                10 => 0,
+                24 => 1,
+                48 => 2,
+                96 => 3,
+                _ => return Err(Error::Encode("Unexpected ZScore window".to_string())),
+            },
+            Node::Roc(r) => match r.offset {
+                1 => 4,
+                4 => 5,
+                8 => 6,
+                12 => 7,
+                _ => return Err(Error::Encode("Unexpected Roc offset".to_string())),
+            },
+            Node::Std(s) => match s.window {
+                10 => 8,
+                24 => 9,
+                48 => 10,
+                96 => 11,
+                _ => return Err(Error::Encode("Unexpected Std window".to_string())),
+            },
+            _ => {
+                return Err(Error::Encode(
+                    "Could not encode unexpected Node type to gene".to_string(),
+                ));
+            }
+        };
+
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 1 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
         }
+
+        let node = match genes[0] {
+            0 => Node::ZScore(ZScore::new(10)),
+            1 => Node::ZScore(ZScore::new(24)),
+            2 => Node::ZScore(ZScore::new(48)),
+            3 => Node::ZScore(ZScore::new(96)),
+            4 => Node::Roc(Roc::new(1)),
+            5 => Node::Roc(Roc::new(4)),
+            6 => Node::Roc(Roc::new(8)),
+            7 => Node::Roc(Roc::new(12)),
+            8 => Node::Std(Std::new(10)),
+            9 => Node::Std(Std::new(24)),
+            10 => Node::Std(Std::new(48)),
+            11 => Node::Std(Std::new(96)),
+            _ => {
+                return Err(Error::Decode(
+                    "Could not decode unexpected gene value to Node".to_string(),
+                ));
+            }
+        };
+
+        Ok(node)
+    }
+}
+
+impl Genotype for Interpolation {
+    type Phenotype = Interpolation;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let lower = 0;
+        let upper = 4;
+        let steps = 5;
+        let bounds = GeneBounds::integer(lower, upper, steps)?;
+        Ok(vec![bounds])
     }
 
-    fn to_gene(self) -> i64 {
-        match self {
-            Self::ZScore10 => 0,
-            Self::ZScore24 => 1,
-            Self::ZScore48 => 2,
-            Self::ZScore96 => 3,
-            Self::Roc1 => 4,
-            Self::Roc4 => 5,
-            Self::Roc8 => 6,
-            Self::Roc12 => 7,
-            Self::Std10 => 8,
-            Self::Std24 => 9,
-            Self::Std48 => 10,
-            Self::Std96 => 11,
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let gene = match self {
+            Interpolation::Linear(linear) => match linear.window_size {
+                1 => 0,
+                2 => 1,
+                4 => 2,
+                8 => 3,
+                16 => 4,
+                _ => {
+                    return Err(Error::Encode(
+                        "Could not encode unexpected linear interpolation window to gene"
+                            .to_string(),
+                    ));
+                }
+            },
+            _ => {
+                return Err(Error::Encode(
+                    "Could not encode unexpected interpolation variant to gene".to_string(),
+                ));
+            }
+        };
+
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        let interpolation = match genes[0] {
+            0 => Interpolation::Linear(LinearInterpolator::new(1)),
+            1 => Interpolation::Linear(LinearInterpolator::new(2)),
+            2 => Interpolation::Linear(LinearInterpolator::new(4)),
+            3 => Interpolation::Linear(LinearInterpolator::new(8)),
+            4 => Interpolation::Linear(LinearInterpolator::new(16)),
+            _ => {
+                return Err(Error::Decode(
+                    "Could not decode unexpected gene value to Interpolation".to_string(),
+                ));
+            }
+        };
+
+        Ok(interpolation)
+    }
+}
+
+impl Genotype for Optimizable {
+    type Phenotype = Optimizable;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let lower = 0;
+        let upper = 11;
+        let steps = 12;
+        let bounds = GeneBounds::integer(lower, upper, steps)?;
+        Ok(vec![bounds])
+    }
+
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let gene = match self {
+            Self::Pm25 => 0,
+            Self::Pm10 => 1,
+            Self::So2 => 2,
+            Self::No2 => 3,
+            Self::Co => 4,
+            Self::O3 => 5,
+            Self::Temp => 6,
+            Self::Pres => 7,
+            Self::Dewp => 8,
+            Self::Rain => 9,
+            Self::Wspm => 10,
+            Self::Wd => 11,
+        };
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 1 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
         }
+
+        let key = match genes[0] {
+            0 => Optimizable::Pm25,
+            1 => Optimizable::Pm10,
+            2 => Optimizable::So2,
+            3 => Optimizable::No2,
+            4 => Optimizable::Co,
+            5 => Optimizable::O3,
+            6 => Optimizable::Temp,
+            7 => Optimizable::Pres,
+            8 => Optimizable::Dewp,
+            9 => Optimizable::Rain,
+            10 => Optimizable::Wspm,
+            11 => Optimizable::Wd,
+            _ => {
+                return Err(Error::Decode(
+                    "Could not decode unexpected gene value to Node".to_string(),
+                ));
+            }
+        };
+
+        Ok(key)
+    }
+}
+
+impl Genotype for Extract {
+    type Phenotype = Extract;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let mut bounds = Vec::with_capacity(4);
+        bounds.extend(Optimizable::morphology()?);
+        bounds.extend(Interpolation::morphology()?);
+        bounds.extend(Node::morphology()?);
+        bounds.extend(Node::morphology()?);
+        Ok(bounds)
     }
 
-    /// Convert Transform to a preprocessor Node
-    fn to_node(&self) -> Node {
-        match self {
-            Self::ZScore10 => Node::ZScore(ZScore::new(10)),
-            Self::ZScore24 => Node::ZScore(ZScore::new(24)),
-            Self::ZScore48 => Node::ZScore(ZScore::new(48)),
-            Self::ZScore96 => Node::ZScore(ZScore::new(96)),
-            Self::Roc1 => Node::Roc(Roc::new(1)),
-            Self::Roc4 => Node::Roc(Roc::new(4)),
-            Self::Roc8 => Node::Roc(Roc::new(8)),
-            Self::Roc12 => Node::Roc(Roc::new(12)),
-            Self::Std10 => Node::Std(Std::new(10)),
-            Self::Std24 => Node::Std(Std::new(24)),
-            Self::Std48 => Node::Std(Std::new(48)),
-            Self::Std96 => Node::Std(Std::new(96)),
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let mut genes = Vec::with_capacity(4);
+
+        let optimizable: Optimizable = self
+            .source
+            .as_str()
+            .try_into()
+            .map_err(|err: OptimizableError| Error::Encode(err.to_string()))?;
+
+        genes.extend(optimizable.encode()?);
+        genes.extend(self.interpolation.encode()?);
+        for node in &self.nodes {
+            genes.extend(node.encode()?);
         }
+
+        Ok(genes)
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 4 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
+        }
+
+        let source = Optimizable::decode(&[genes[0]])?.to_string();
+        let interpolation = Interpolation::decode(&[genes[1]])?;
+        let nodes = genes[2..]
+            .iter()
+            .map(|gene| Node::decode(&[*gene]))
+            .collect::<Result<Vec<Node>, Error>>()?;
+
+        Ok(Extract {
+            source,
+            interpolation,
+            nodes,
+        })
     }
 }
 
-/// A feature with its source column and preprocessing pipeline
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Feature {
-    pub(super) source: String,             // e.g., "TEMP", "PRES"
-    pub transforms: Vec<Transform>,        // Pipeline of transforms to apply
-}
+pub struct HiddenSize(usize);
 
-impl Feature {
-    /// Convert feature's transforms to a Pipeline
-    pub(super) fn to_pipeline(&self) -> Pipeline {
-        let nodes: Vec<Node> = self.transforms.iter().map(|t| t.to_node()).collect();
-        Pipeline::new(nodes)
+impl Genotype for HiddenSize {
+    type Phenotype = HiddenSize;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let bounds = GeneBounds::integer(0, 5, 6)?;
+        Ok(vec![bounds])
+    }
+
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let gene = match self.0 {
+            4 => 0,
+            8 => 1,
+            16 => 2,
+            32 => 3,
+            64 => 4,
+            128 => 5,
+            _ => return Err(Error::Encode(format!("Unknown hidden size: {}", self.0))),
+        };
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 1 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
+        }
+
+        let value = match genes[0] {
+            0 => 4,
+            1 => 8,
+            2 => 16,
+            3 => 32,
+            4 => 64,
+            5 => 128,
+            _ => {
+                return Err(Error::Decode(format!(
+                    "Unknown hidden size gene: {}",
+                    genes[0]
+                )));
+            }
+        };
+        Ok(HiddenSize(value))
     }
 }
 
-/// Phenotype for Beijing air quality prediction optimization
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningRate(f64);
+
+impl Genotype for LearningRate {
+    type Phenotype = LearningRate;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let bounds = GeneBounds::integer(0, 3, 4)?;
+        Ok(vec![bounds])
+    }
+
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let gene = match self.0 {
+            lr if (lr - 0.0001).abs() < 1e-10 => 0,
+            lr if (lr - 0.0004).abs() < 1e-10 => 1,
+            lr if (lr - 0.0007).abs() < 1e-10 => 2,
+            lr if (lr - 0.001).abs() < 1e-10 => 3,
+            _ => return Err(Error::Encode(format!("Unknown learning rate: {}", self.0))),
+        };
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 1 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
+        }
+
+        let value = match genes[0] {
+            0 => 0.0001,
+            1 => 0.0004,
+            2 => 0.0007,
+            3 => 0.001,
+            _ => {
+                return Err(Error::Decode(format!(
+                    "Unknown learning rate gene: {}",
+                    genes[0]
+                )));
+            }
+        };
+        Ok(LearningRate(value))
+    }
+}
+
+pub struct SequenceLength(usize);
+
+impl Genotype for SequenceLength {
+    type Phenotype = SequenceLength;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let bounds = GeneBounds::integer(0, 9, 10)?;
+        Ok(vec![bounds])
+    }
+
+    fn encode(&self) -> Result<Vec<i64>, Error> {
+        let gene = (self.0 / 10 - 1) as i64;
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 1 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
+        }
+
+        let value = (genes[0] as usize + 1) * 10;
+        Ok(SequenceLength(value))
+    }
+}
+
 pub struct BeijingPhenotype {
-    #[serde(skip)]
-    features: Vec<Feature>, // The optimized features with pipelines
+    features: Vec<Extract>,
     pub hidden_size: usize,
     pub learning_rate: f64,
     pub sequence_length: usize,
 }
 
 impl BeijingPhenotype {
-    /// Get a reference to the features (useful for evaluator)
-    pub fn features(&self) -> &[Feature] {
+    pub fn features(&self) -> &[Extract] {
         &self.features
     }
 }
 
+// Constants for gene bounds
+const FEATURE_COUNT: usize = 7;
+
 impl Encodeable for BeijingPhenotype {
-    const NAME: &'static str = "beijing_air_quality_feature_engineering";
+    const NAME: &'static str = "beijing_air_quality";
 
     type Phenotype = BeijingPhenotype;
 
     fn morphology() -> Vec<GeneBounds> {
         let mut bounds = Vec::new();
 
-        // 7 features, each with 4 genes
+        // 7 features, each with Extract morphology
         for _ in 0..FEATURE_COUNT {
-            // Source column index (0 to SOURCE_COLUMN_COUNT-1)
-            bounds.push(
-                GeneBounds::integer(
-                    0,
-                    (SOURCE_COLUMN_COUNT - 1) as i32,
-                    SOURCE_COLUMN_COUNT as u32,
-                )
-                .unwrap(),
-            );
-
-            // Pipeline length (0, 1, or 2 transforms)
-            bounds.push(
-                GeneBounds::integer(
-                    0,
-                    MAX_PIPELINE_LENGTH as i32,
-                    (MAX_PIPELINE_LENGTH + 1) as u32,
-                )
-                .unwrap(),
-            );
-
-            // Transform 1 index (0 to TRANSFORM_COUNT-1)
-            bounds.push(
-                GeneBounds::integer(0, (TRANSFORM_COUNT - 1) as i32, TRANSFORM_COUNT as u32)
-                    .unwrap(),
-            );
-
-            // Transform 2 index (0 to TRANSFORM_COUNT-1)
-            bounds.push(
-                GeneBounds::integer(0, (TRANSFORM_COUNT - 1) as i32, TRANSFORM_COUNT as u32)
-                    .unwrap(),
-            );
+            bounds.extend(Extract::morphology().expect("Failed to get Extract morphology"));
         }
 
-        // Hyperparameters - each stores an index into the options array
-        bounds.push(
-            GeneBounds::integer(
-                0,
-                (HIDDEN_SIZE_OPTIONS.len() - 1) as i32,
-                HIDDEN_SIZE_OPTIONS.len() as u32,
-            )
-            .unwrap(),
-        );
-        bounds.push(
-            GeneBounds::integer(
-                0,
-                (LEARNING_RATE_OPTIONS.len() - 1) as i32,
-                LEARNING_RATE_OPTIONS.len() as u32,
-            )
-            .unwrap(),
-        );
-        bounds.push(
-            GeneBounds::integer(
-                0,
-                (SEQUENCE_LENGTH_OPTIONS.len() - 1) as i32,
-                SEQUENCE_LENGTH_OPTIONS.len() as u32,
-            )
-            .unwrap(),
-        );
+        // Hyperparameters
+        bounds.extend(HiddenSize::morphology().expect("Failed to get HiddenSize morphology"));
+        bounds.extend(LearningRate::morphology().expect("Failed to get LearningRate morphology"));
+        bounds
+            .extend(SequenceLength::morphology().expect("Failed to get SequenceLength morphology"));
 
         bounds
     }
@@ -193,80 +424,69 @@ impl Encodeable for BeijingPhenotype {
         let mut genes = Vec::new();
 
         // Encode 7 features
-        for feature in &self.features {
-            // Source column
-            let source_idx = SOURCE_COLUMNS
-                .iter()
-                .position(|&col| col == feature.source)
-                .unwrap_or(0) as i64;
-            genes.push(source_idx);
-
-            // Pipeline length (max 2)
-            genes.push(feature.transforms.len().min(MAX_PIPELINE_LENGTH) as i64);
-
-            // Transforms (pad with 0 if fewer than 2)
-            for i in 0..MAX_PIPELINE_LENGTH {
-                if i < feature.transforms.len() {
-                    genes.push(feature.transforms[i].to_gene());
-                } else {
-                    genes.push(0);
-                }
-            }
+        for extract in &self.features {
+            genes.extend(extract.encode().expect("Failed to encode Extract"));
         }
 
-        // Encode hyperparameters using position in options arrays
-        let hidden_size_idx = HIDDEN_SIZE_OPTIONS
-            .iter()
-            .position(|&size| size == self.hidden_size)
-            .unwrap_or(2) as i64; // default to index 2 (16)
-        genes.push(hidden_size_idx);
-
-        let lr_idx = LEARNING_RATE_OPTIONS
-            .iter()
-            .position(|&lr| (lr - self.learning_rate).abs() < 1e-10)
-            .unwrap_or(1) as i64; // default to index 1 (5e-4)
-        genes.push(lr_idx);
-
-        let seq_len_idx = SEQUENCE_LENGTH_OPTIONS
-            .iter()
-            .position(|&len| len == self.sequence_length)
-            .unwrap_or(4) as i64; // default to index 4 (50)
-        genes.push(seq_len_idx);
+        // Encode hyperparameters
+        genes.extend(
+            HiddenSize(self.hidden_size)
+                .encode()
+                .expect("Failed to encode HiddenSize"),
+        );
+        genes.extend(
+            LearningRate(self.learning_rate)
+                .encode()
+                .expect("Failed to encode LearningRate"),
+        );
+        genes.extend(
+            SequenceLength(self.sequence_length)
+                .encode()
+                .expect("Failed to encode SequenceLength"),
+        );
 
         genes
     }
 
     fn decode(genes: &[i64]) -> Self::Phenotype {
         let mut features = Vec::new();
+        let mut gene_offset = 0;
 
-        // Decode 7 features (4 genes per feature: source, length, t1, t2)
-        for i in 0..FEATURE_COUNT {
-            let base_idx = i * 4;
-
-            let source_idx = genes[base_idx].clamp(0, SOURCE_COLUMN_COUNT as i64 - 1) as usize;
-            let source = SOURCE_COLUMNS[source_idx].to_string();
-
-            let pipeline_length = genes[base_idx + 1].clamp(0, MAX_PIPELINE_LENGTH as i64) as usize;
-
-            let mut transforms = Vec::new();
-            for j in 0..pipeline_length {
-                if let Some(transform) = Transform::from_gene(genes[base_idx + 2 + j]) {
-                    transforms.push(transform);
-                }
-            }
-
-            features.push(Feature { source, transforms });
+        // Decode 7 features
+        for _ in 0..FEATURE_COUNT {
+            let extract_morphology =
+                Extract::morphology().expect("Failed to get Extract morphology");
+            let extract_gene_count = extract_morphology.len();
+            assert!(
+                gene_offset + extract_gene_count <= genes.len(),
+                "Not enough genes to decode Extract"
+            );
+            let extract = Extract::decode(&genes[gene_offset..gene_offset + extract_gene_count])
+                .expect("Failed to decode Extract");
+            features.push(extract);
+            gene_offset += extract_gene_count;
         }
 
-        // Decode hyperparameters (genes are at indices 28, 29, 30)
-        let hidden_size_idx = genes[28].clamp(0, HIDDEN_SIZE_OPTIONS.len() as i64 - 1) as usize;
-        let hidden_size = HIDDEN_SIZE_OPTIONS[hidden_size_idx];
+        // Decode hyperparameters
+        assert!(
+            gene_offset + 3 <= genes.len(),
+            "Not enough genes to decode hyperparameters: need 3 more, have {}",
+            genes.len() - gene_offset
+        );
 
-        let lr_idx = genes[29].clamp(0, LEARNING_RATE_OPTIONS.len() as i64 - 1) as usize;
-        let learning_rate = LEARNING_RATE_OPTIONS[lr_idx];
+        let hidden_size = HiddenSize::decode(&genes[gene_offset..gene_offset + 1])
+            .expect("Failed to decode HiddenSize")
+            .0;
+        gene_offset += 1;
 
-        let seq_len_idx = genes[30].clamp(0, SEQUENCE_LENGTH_OPTIONS.len() as i64 - 1) as usize;
-        let sequence_length = SEQUENCE_LENGTH_OPTIONS[seq_len_idx];
+        let learning_rate = LearningRate::decode(&genes[gene_offset..gene_offset + 1])
+            .expect("Failed to decode LearningRate")
+            .0;
+        gene_offset += 1;
+
+        let sequence_length = SequenceLength::decode(&genes[gene_offset..gene_offset + 1])
+            .expect("Failed to decode SequenceLength")
+            .0;
 
         BeijingPhenotype {
             features,

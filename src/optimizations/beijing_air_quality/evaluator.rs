@@ -1,7 +1,5 @@
-use super::ingestion::PATHS;
 use super::phenotype::BeijingPhenotype;
-use crate::core::preprocessor::Transform;
-use crate::core::preprocessor::{Cos, Node, Pipeline, Sin};
+use crate::core::ingestion::Extract;
 use crate::core::train_config::TrainConfig;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};
@@ -9,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use uuid::Uuid as GuidUuid;
 
 pub struct BeijingEvaluator;
 
@@ -20,42 +19,32 @@ impl BeijingEvaluator {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RequestVariables {
-    prediction_horizon: usize,
-    targets: Vec<String>,
+    pub prediction_horizon: usize,
 }
 
 impl RequestVariables {
-    pub fn new(prediction_horizon: usize, targets: Vec<Transform>) -> Self {
-        let targets = targets
-            .iter()
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>();
-
-        Self {
-            prediction_horizon,
-            targets,
-        }
+    pub fn new(prediction_horizon: usize) -> Self {
+        Self { prediction_horizon }
     }
 }
 
-/// Request sent to train_worker subprocess
+/// Request sent to training binary
 #[derive(Debug, Serialize)]
-struct TrainWorkerRequest {
+struct TrainRequest {
+    genotype_id: GuidUuid,
     train_config: TrainConfig,
-    genotype_id: String,
-    data_paths: Vec<String>,
-    features: Vec<String>,
-    targets: Vec<String>,
+    processors_features: Vec<Extract>,
+    processors_targets: Vec<Extract>,
     epochs: usize,
     batch_size: usize,
     learning_rate: f64,
 }
 
-/// Response from train_worker subprocess
+/// Response from training binary
 #[derive(Debug, Deserialize)]
-struct TrainWorkerResponse {
+struct TrainResponse {
     fitness: f64,
-    genotype_id: String,
+    genotype_id: GuidUuid,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -80,120 +69,89 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
 
             tracing::info!(message = "Request data", req_var = ?req_var);
 
-            // Build time features (always included) as Transform instances
-            let mut features = vec![
-                Transform {
-                    destination: "hour_sin".to_string(),
-                    source: "hour".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Sin(Sin::new(24.0))]),
-                },
-                Transform {
-                    destination: "hour_cos".to_string(),
-                    source: "hour".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Cos(Cos::new(24.0))]),
-                },
-                Transform {
-                    destination: "month_sin".to_string(),
-                    source: "month".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Sin(Sin::new(12.0))]),
-                },
-                Transform {
-                    destination: "month_cos".to_string(),
-                    source: "month".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Cos(Cos::new(12.0))]),
-                },
-            ];
+            // Get feature Extracts directly from phenotype
+            let processors_features = phenotype.features().to_vec();
 
-            // Convert phenotype features to Transform instances
-            for (i, feat) in phenotype.features().iter().enumerate() {
-                let destination = format!("feat_{}", i);
-                let source = feat.source.clone();
-                let pipeline = feat.to_pipeline();
-                features.push(Transform {
-                    destination,
-                    source,
-                    pipeline,
-                });
-            }
+            // Target and time transforms are hardcoded in the binary
+            // Here we just send an empty vec for targets
+            let processors_targets = Vec::new();
 
-            // Target definition (always TEMP with no preprocessing)
-            let targets = vec![Transform {
-                destination: "target_temp".to_string(),
-                source: "TEMP".to_string(),
-                pipeline: Pipeline::new(vec![]),
-            }];
-
-            let input_size = 4 + phenotype.features().len();
             let train_config = TrainConfig::new(
-                input_size,
+                processors_features.len(),
                 phenotype.hidden_size,
-                targets.len(),
+                1, // output_size - always 1 target
                 phenotype.sequence_length,
                 req_var.prediction_horizon,
-                features
+                processors_features
                     .iter()
-                    .map(|t| t.to_string())
+                    .map(|e| e.source.clone())
                     .collect::<Vec<String>>(),
-                req_var.targets.iter().map(|t| t.to_string()).collect(),
+                vec!["TEMP".to_string()],
             );
 
-            // Prepare request for train_worker subprocess
-            let worker_request = TrainWorkerRequest {
+            // Prepare request for training binary
+            let train_request = TrainRequest {
+                genotype_id: GuidUuid::from_bytes(*genotype_id.as_bytes()),
                 train_config,
-                genotype_id: genotype_id.to_string(),
-                data_paths: PATHS.iter().map(|s| s.to_string()).collect(),
-                features: features.iter().map(|t| t.to_string()).collect(),
-                targets: targets.iter().map(|t| t.to_string()).collect(),
+                processors_features,
+                processors_targets,
                 epochs: 25,
                 batch_size: 100,
                 learning_rate: phenotype.learning_rate,
             };
 
             tracing::info!(
-                message = "Spawning train_worker subprocess",
+                message = "Spawning training binary",
                 genotype_id = genotype_id.to_string()
             );
 
             // Spawn subprocess on blocking task to avoid blocking the async runtime
-            // Use select! to allow cancellation - if the future is cancelled, we'll abort the child process
             let task = tokio::task::spawn_blocking(move || {
-                // Spawn train_worker subprocess
-                let mut child = Command::new("./target/release/train_worker")
+                // Spawn training binary
+                let mut child = Command::new("./target/release/beijing")
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()
-                    .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to spawn worker: {}", e)))?;
+                    .map_err(|e| {
+                        EvaluationError::WorkerFailed(format!("Failed to spawn binary: {}", e))
+                    })?;
 
-                // Send request to worker via stdin
-                let json_request = serde_json::to_string(&worker_request)?;
+                // Send request to binary via stdin
+                let json_request = serde_json::to_string(&train_request)?;
                 if let Some(mut stdin) = child.stdin.take() {
-                    stdin
-                        .write_all(json_request.as_bytes())
-                        .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to write to worker: {}", e)))?
+                    stdin.write_all(json_request.as_bytes()).map_err(|e| {
+                        EvaluationError::WorkerFailed(format!("Failed to write to binary: {}", e))
+                    })?
                 } else {
-                    return Err(
-                        EvaluationError::WorkerFailed("Failed to connect to worker stdin".to_string()).into(),
-                    );
+                    return Err(EvaluationError::WorkerFailed(
+                        "Failed to connect to binary stdin".to_string(),
+                    )
+                    .into());
                 }
 
-                // Wait for worker to finish and read response
-                let output = child
-                    .wait_with_output()
-                    .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to wait for worker: {}", e)))?;
+                // Wait for binary to finish and read response
+                let output = child.wait_with_output().map_err(|e| {
+                    EvaluationError::WorkerFailed(format!("Failed to wait for binary: {}", e))
+                })?;
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     return Err(EvaluationError::WorkerFailed(format!(
-                        "Worker failed with status {}: {}",
+                        "Binary failed with status {}: {}",
                         output.status, stderr
                     ))
                     .into());
                 }
 
                 // Parse response
-                let response: TrainWorkerResponse = serde_json::from_slice(&output.stdout)
-                    .map_err(|e| EvaluationError::WorkerFailed(format!("Failed to parse worker response: {}", e)))?;
+                let response: TrainResponse =
+                    serde_json::from_slice(&output.stdout).map_err(|e| {
+                        EvaluationError::WorkerFailed(format!(
+                            "Failed to parse binary response: {}",
+                            e
+                        ))
+                    })?;
 
                 Ok(response)
             });
@@ -210,8 +168,8 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 .map_err(|e: anyhow::Error| e)?;
 
             tracing::info!(
-                message = "Train worker completed",
-                genotype_id = response.genotype_id,
+                message = "Training completed",
+                genotype_id = response.genotype_id.to_string(),
                 fitness = response.fitness
             );
 

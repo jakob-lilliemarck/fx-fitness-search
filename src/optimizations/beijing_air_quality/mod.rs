@@ -1,11 +1,10 @@
 mod cast;
 mod commands;
 mod evaluator;
-mod infer_dataset;
-pub mod ingestion;
-mod parse;
+mod ingestion;
 mod phenotype;
 
 pub use commands::BeijingCommand;
 pub use evaluator::BeijingEvaluator;
+pub use ingestion::ingest;
 pub use phenotype::BeijingPhenotype;

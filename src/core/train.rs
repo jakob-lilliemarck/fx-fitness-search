@@ -1,9 +1,7 @@
-use crate::core::dataset::SequenceDatasetItem;
-
 use super::batcher::SequenceBatcher;
-use super::dataset::SequenceDataset;
 use super::model::SequenceModel;
 use super::train_config::TrainConfig;
+use crate::core::dataset::SequenceDatasetItem;
 use burn::data::dataloader::Dataset;
 use burn::data::dataloader::batcher::Batcher;
 use burn::grad_clipping::GradientClippingConfig;
@@ -178,76 +176,4 @@ where
     }
 
     (model, best_valid_loss)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::dataset::DatasetBuilder;
-    use super::super::model::SimpleLstm;
-    use super::super::preprocessor::Pipeline;
-    use super::*;
-    use burn::backend::ndarray::NdArrayDevice;
-    use burn::backend::{Autodiff, NdArray};
-    use std::collections::HashMap;
-
-    #[tokio::test]
-    async fn test_training_converges() {
-        type Backend = Autodiff<NdArray>;
-        let device = NdArrayDevice::default();
-
-        // Simple repeating pattern: 0, 1, 2, 3, 2, 1, 0, 1, ...
-        let pattern = [0.0, 1.0, 2.0, 3.0, 2.0, 1.0, 0.0, 1.0];
-
-        // Create pipelines - passthrough (no preprocessing)
-        // Use same data for both features and targets
-        let mut feature_pipelines = HashMap::new();
-        feature_pipelines.insert("value".to_string(), Pipeline::new(vec![]));
-
-        let mut target_pipelines = HashMap::new();
-        target_pipelines.insert("value".to_string(), Pipeline::new(vec![]));
-
-        let output_names = vec!["value".to_string()];
-        let source_columns = vec!["value".to_string()];
-
-        // Build dataset
-        let mut builder = DatasetBuilder::new(
-            feature_pipelines,
-            output_names.clone(),
-            source_columns.clone(),
-            target_pipelines,
-            output_names,
-            source_columns,
-            Some(100),
-        );
-
-        for i in 0..100 {
-            let value = pattern[i % pattern.len()];
-            let mut record = HashMap::new();
-            record.insert("value".to_string(), value);
-            builder.push(record, i.to_string()).unwrap();
-        }
-
-        // Split into train (80%) and validation (20%)
-        let (dataset_train, opt_dataset_valid) =
-            builder.build(4, 1, Some(0.8)).expect("should build");
-        let dataset_valid = opt_dataset_valid.expect("should get validation dataset");
-
-        // Create model - input_size=1 (single feature), output_size=1, seq_len=4
-        let model = SimpleLstm::<Backend>::new(&device, 1, 64, 1, 4);
-
-        // Train
-        train_sync(
-            &device,
-            &dataset_train,
-            &dataset_valid,
-            25,
-            32,
-            0.01,
-            model,
-            None,
-            None,
-        );
-
-        println!("Training complete! Check if losses decreased.");
-    }
 }

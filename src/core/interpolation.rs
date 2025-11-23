@@ -24,7 +24,14 @@ pub enum Interpolation {
 impl Interpolation {
     pub fn interpolate(&mut self, input: Option<f32>) -> Result<Option<f32>, Error> {
         match self {
-            Self::Error => return Err(Error::Required),
+            Self::Error => {
+                // Error strategy: return the value if present, fail only if missing
+                if input.is_some() {
+                    Ok(input)
+                } else {
+                    Err(Error::Required)
+                }
+            }
             Self::Linear(i) => Ok(i.interpolate(input)),
         }
     }
@@ -32,7 +39,7 @@ impl Interpolation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinearInterpolator {
-    window_size: usize,
+    pub window_size: usize,
     #[serde(skip, default)]
     prev_values: VecDeque<f32>,
 }

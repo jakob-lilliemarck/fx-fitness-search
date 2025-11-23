@@ -1,8 +1,11 @@
-use fx_durable_ga_app::core::ingestion::ManySequencesAdapter;
+use fx_durable_ga_app::core::dataset::ManySequencesAdapter;
+use fx_durable_ga_app::core::interpolation::LinearInterpolator;
 use fx_durable_ga_app::core::model::{FeedForward, SequenceModel};
 use fx_durable_ga_app::core::preprocessor::{Cos, Node, Sin};
-use fx_durable_ga_app::core::{ingestion::Extract, train_config::TrainConfig};
-use fx_durable_ga_app::optimizations::beijing_air_quality::ingestion::ingest;
+use fx_durable_ga_app::core::{
+    ingestion::Extract, interpolation::Interpolation, train_config::TrainConfig,
+};
+use fx_durable_ga_app::optimizations::beijing_air_quality::ingest;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 use uuid::Uuid;
@@ -10,7 +13,7 @@ use uuid::Uuid;
 #[tokio::main]
 async fn main() {
     if let Err(e) = run().await {
-        eprintln!("Error: {}", e);
+        eprintln!("Error: {:#}", e);
         std::process::exit(1);
     }
 }
@@ -33,15 +36,8 @@ struct Response {
 }
 
 fn append_time_transform(extracts: &mut Vec<Extract>, key: &str, period: u32) {
-    extracts.push(
-        Extract::new(key, &format!("{} sine transform", key))
-            .with_node(Node::Sin(Sin::new(period as f32))),
-    );
-
-    extracts.push(
-        Extract::new(key, &format!("{} cosine transform", key))
-            .with_node(Node::Cos(Cos::new(period as f32))),
-    );
+    extracts.push(Extract::new(key).with_node(Node::Sin(Sin::new(period as f32))));
+    extracts.push(Extract::new(key).with_node(Node::Cos(Cos::new(period as f32))));
 }
 
 async fn run() -> anyhow::Result<()> {
@@ -60,6 +56,10 @@ async fn run() -> anyhow::Result<()> {
     append_time_transform(&mut request.processors_features, "month", 12);
     append_time_transform(&mut request.processors_features, "day_of_week", 7);
     append_time_transform(&mut request.processors_features, "hour", 24);
+
+    request.processors_targets.push(
+        Extract::new("TEMP").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+    );
 
     type Backend = burn::backend::Autodiff<burn::backend::NdArray>;
     let device = burn::backend::ndarray::NdArrayDevice::default();
