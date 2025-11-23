@@ -79,7 +79,7 @@ pub struct Ema {
 }
 
 impl Ema {
-    fn new(window: usize, alpha: f32) -> Self {
+    pub fn new(window: usize, alpha: f32) -> Self {
         Self {
             window,
             alpha,

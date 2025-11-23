@@ -1,6 +1,6 @@
 use crate::core::ingestion::Extract;
 use crate::core::interpolation::{Interpolation, LinearInterpolator};
-use crate::core::preprocessor::{Node, Roc, Std, ZScore};
+use crate::core::preprocessor::{Ema, Node, Roc, Std, ZScore};
 use crate::optimizations::beijing_air_quality::cast::{Optimizable, OptimizableError};
 use fx_durable_ga::models::{Encodeable, GeneBoundError, GeneBounds};
 
@@ -27,8 +27,8 @@ impl Genotype for Node {
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let lower = 0;
-        let upper = 11;
-        let steps = 12;
+        let upper = 16;
+        let steps = 17;
         let bounds = GeneBounds::integer(lower, upper, steps)?;
         Ok(vec![bounds])
     }
@@ -55,6 +55,14 @@ impl Genotype for Node {
                 48 => 10,
                 96 => 11,
                 _ => return Err(Error::Encode("Unexpected Std window".to_string())),
+            },
+            Node::Ema(e) => match e.window {
+                2 => 12,
+                4 => 13,
+                8 => 14,
+                16 => 15,
+                32 => 16,
+                _ => return Err(Error::Encode("Unexpected Ema window".to_string())),
             },
             _ => {
                 return Err(Error::Encode(
@@ -86,6 +94,11 @@ impl Genotype for Node {
             9 => Node::Std(Std::new(24)),
             10 => Node::Std(Std::new(48)),
             11 => Node::Std(Std::new(96)),
+            12 => Node::Ema(Ema::new(2, 2.0 / 3.0)),
+            13 => Node::Ema(Ema::new(4, 2.0 / 5.0)),
+            14 => Node::Ema(Ema::new(8, 2.0 / 9.0)),
+            15 => Node::Ema(Ema::new(16, 2.0 / 17.0)),
+            16 => Node::Ema(Ema::new(32, 2.0 / 33.0)),
             _ => {
                 return Err(Error::Decode(
                     "Could not decode unexpected gene value to Node".to_string(),
