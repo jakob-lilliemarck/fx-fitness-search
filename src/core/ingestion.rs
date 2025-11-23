@@ -643,3 +643,166 @@ mod sequence_tests {
         assert!(sequence2.split(1.1).is_err());
     }
 }
+
+#[cfg(test)]
+mod many_sequences_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_many_sequences() -> ManySequences {
+        // Create 3 sequences of different sizes: 3, 2, 4 items
+        let mut sequences = Vec::new();
+
+        // Sequence 1: 3 items
+        sequences.push(Sequence {
+            count: 3,
+            features: vec![vec![0.0], vec![1.0], vec![2.0]],
+            targets: vec![vec![0.0], vec![1.0], vec![2.0]],
+            metadata: vec![HashMap::new(), HashMap::new(), HashMap::new()],
+        });
+
+        // Sequence 2: 2 items
+        sequences.push(Sequence {
+            count: 2,
+            features: vec![vec![10.0], vec![11.0]],
+            targets: vec![vec![10.0], vec![11.0]],
+            metadata: vec![HashMap::new(), HashMap::new()],
+        });
+
+        // Sequence 3: 4 items
+        sequences.push(Sequence {
+            count: 4,
+            features: vec![vec![20.0], vec![21.0], vec![22.0], vec![23.0]],
+            targets: vec![vec![20.0], vec![21.0], vec![22.0], vec![23.0]],
+            metadata: vec![HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new()],
+        });
+
+        ManySequences::new(sequences)
+    }
+
+    #[test]
+    fn get_item_from_first_sequence() {
+        // Behavior: get_item maps global index 0 to the first sequence.
+        let many = create_test_many_sequences();
+
+        let (features, target) = many.get_item(0, 1, 0).unwrap();
+        assert_eq!(features, &[vec![0.0]]);
+        assert_eq!(target, &[0.0]);
+    }
+
+    #[test]
+    fn get_item_from_second_sequence() {
+        // Behavior: get_item with index 3 crosses into the second sequence.
+        // Sequence 1 has 3 items (indices 0-2), so index 3 maps to second sequence, local index 0.
+        let many = create_test_many_sequences();
+
+        let (features, target) = many.get_item(3, 1, 0).unwrap();
+        assert_eq!(features, &[vec![10.0]]);
+        assert_eq!(target, &[10.0]);
+    }
+
+    #[test]
+    fn get_item_from_third_sequence() {
+        // Behavior: get_item with index 5 crosses into the third sequence.
+        // Sequences 1-2 have 3+2=5 items (indices 0-4), so index 5 maps to third sequence, local index 0.
+        let many = create_test_many_sequences();
+
+        let (features, target) = many.get_item(5, 1, 0).unwrap();
+        assert_eq!(features, &[vec![20.0]]);
+        assert_eq!(target, &[20.0]);
+    }
+
+    #[test]
+    fn get_item_with_sequence_length() {
+        // Behavior: sequence_length works correctly when retrieving multiple rows.
+        let many = create_test_many_sequences();
+
+        let (features, target) = many.get_item(0, 2, 0).unwrap();
+        assert_eq!(features, &[vec![0.0], vec![1.0]]);
+        assert_eq!(target, &[1.0]);
+    }
+
+    #[test]
+    fn get_item_out_of_bounds() {
+        // Behavior: get_item returns None when index is out of bounds.
+        let many = create_test_many_sequences();
+
+        // Total items with sequence_length=1, prediction_horizon=0: 3+2+4=9
+        assert!(many.get_item(9, 1, 0).is_none());
+        assert!(many.get_item(100, 1, 0).is_none());
+    }
+
+    #[test]
+    fn len_aggregates_across_sequences() {
+        // Behavior: len(sequence_length, prediction_horizon) sums lengths from all sequences.
+        let many = create_test_many_sequences();
+
+        // Each sequence calculates its own len, then sum:
+        // Seq1: 3 - 1 - 0 + 1 = 3
+        // Seq2: 2 - 1 - 0 + 1 = 2
+        // Seq3: 4 - 1 - 0 + 1 = 4
+        // Total: 3 + 2 + 4 = 9
+        assert_eq!(many.len(1, 0), 9);
+    }
+
+    #[test]
+    fn len_with_prediction_horizon() {
+        // Behavior: len correctly accounts for prediction_horizon in each sequence.
+        let many = create_test_many_sequences();
+
+        // With prediction_horizon=1:
+        // Seq1: 3 - 1 - 1 + 1 = 2
+        // Seq2: 2 - 1 - 1 + 1 = 1
+        // Seq3: 4 - 1 - 1 + 1 = 3
+        // Total: 2 + 1 + 3 = 6
+        assert_eq!(many.len(1, 1), 6);
+    }
+
+    #[test]
+    fn split_divides_all_sequences() {
+        // Behavior: split applies the factor to each sequence independently.
+        let many = create_test_many_sequences();
+
+        let (train, validation) = many.split(0.5).unwrap();
+        // Each sequence splits at 50%:
+        // Seq1: train 1 (0), validation 2 (1,2)
+        // Seq2: train 1 (10), validation 1 (11)
+        // Seq3: train 2 (20,21), validation 2 (22,23)
+        assert_eq!(train.len(1, 0), 1 + 1 + 2);
+        assert_eq!(validation.len(1, 0), 2 + 1 + 2);
+    }
+
+    #[test]
+    fn split_preserves_sequence_count() {
+        // Behavior: split maintains the number of sequences in both train and validation.
+        let many = create_test_many_sequences();
+
+        let (train, validation) = many.split(0.6).unwrap();
+        assert_eq!(train.sequences.len(), 3);
+        assert_eq!(validation.sequences.len(), 3);
+    }
+
+    #[test]
+    fn split_factor_zero() {
+        // Behavior: split(0.0) produces empty train and validation has all sequences.
+        let many = create_test_many_sequences();
+
+        let (train, validation) = many.split(0.0).unwrap();
+        // Train has 0 items in each sequence
+        assert_eq!(train.len(1, 0), 0);
+        // Validation has all items
+        assert_eq!(validation.len(1, 0), 3 + 2 + 4);
+    }
+
+    #[test]
+    fn split_factor_one() {
+        // Behavior: split(1.0) produces train with all sequences and empty validation.
+        let many = create_test_many_sequences();
+
+        let (train, validation) = many.split(1.0).unwrap();
+        // Train has all items
+        assert_eq!(train.len(1, 0), 3 + 2 + 4);
+        // Validation has 0 items in each sequence
+        assert_eq!(validation.len(1, 0), 0);
+    }
+}
