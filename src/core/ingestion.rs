@@ -245,6 +245,8 @@ impl Sequence {
     }
 
     /// The index of the target
+    /// With prediction_horizon=0, target is at the same timestep as the last feature.
+    /// With prediction_horizon=1, target is 1 step ahead, etc.
     fn target(&self, index: usize, sequence_length: usize, prediction_horizon: usize) -> usize {
         self.until(index, sequence_length) + prediction_horizon
     }
@@ -476,5 +478,168 @@ mod tests {
         // Third row should be interpolated to 30.0
         let (features, _target) = sequence.get_item(2, 1, 0).unwrap();
         assert!((features[0][0] - 30.0).abs() < 1e-4);
+    }
+}
+
+#[cfg(test)]
+mod sequence_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_sequence(count: usize) -> Sequence {
+        let mut features = Vec::new();
+        let mut targets = Vec::new();
+        let mut metadata = Vec::new();
+
+        for i in 0..count {
+            features.push(vec![i as f32]);
+            targets.push(vec![i as f32]);
+            let mut meta = HashMap::new();
+            meta.insert("index".to_string(), i.to_string());
+            metadata.push(meta);
+        }
+
+        Sequence {
+            count,
+            features,
+            targets,
+            metadata,
+        }
+    }
+
+    #[test]
+    fn get_item_basic_access() {
+        // Behavior: get_item(index, sequence_length, prediction_horizon) retrieves a contiguous
+        // window of features and the corresponding target.
+        // With prediction_horizon=0, target is at the same timestep as the last feature.
+        let sequence = create_test_sequence(5);
+
+        // Get first item: index=0, sequence_length=1, prediction_horizon=0
+        // Features: row 0, target: row 0 (same timestep)
+        let (features, target) = sequence.get_item(0, 1, 0).unwrap();
+        assert_eq!(features, &[vec![0.0]]);
+        assert_eq!(target, &[0.0]);
+    }
+
+    #[test]
+    fn get_item_sequence_length_multiple_rows() {
+        // Behavior: sequence_length > 1 returns multiple consecutive feature rows as a slice.
+        // Target is at the same timestep as the last feature when prediction_horizon=0.
+        let sequence = create_test_sequence(5);
+
+        // Get item with sequence_length=2, prediction_horizon=0
+        // Features: rows 0-1, target: row 1 (same as last feature)
+        let (features, target) = sequence.get_item(0, 2, 0).unwrap();
+        assert_eq!(features, &[vec![0.0], vec![1.0]]);
+        assert_eq!(target, &[1.0]);
+    }
+
+    #[test]
+    fn get_item_prediction_horizon_offset() {
+        // Behavior: prediction_horizon > 0 offsets the target forward from the last feature.
+        // With sequence_length=1 and prediction_horizon=1, target is 1 step ahead.
+        let sequence = create_test_sequence(5);
+
+        let (features, target) = sequence.get_item(0, 1, 1).unwrap();
+        assert_eq!(features, &[vec![0.0]]);
+        // target_idx = (0 + 1 - 1) + 1 = 1, so target is row 1
+        assert_eq!(target, &[1.0]);
+    }
+
+    #[test]
+    fn get_item_boundary_valid_range() {
+        // Behavior: get_item returns valid items while within bounds.
+        // With count=5, sequence_length=2, prediction_horizon=1:
+        // - len(2, 1) = 5 - 2 - 1 + 1 = 3 valid items (indices 0, 1, 2)
+        let sequence = create_test_sequence(5);
+
+        // Last valid index should be 2
+        assert!(sequence.get_item(2, 2, 1).is_some());
+        // Index 3 should be out of bounds
+        assert!(sequence.get_item(3, 2, 1).is_none());
+    }
+
+    #[test]
+    fn get_item_out_of_bounds() {
+        // Behavior: get_item returns None when index is out of bounds.
+        let sequence = create_test_sequence(5);
+
+        assert!(sequence.get_item(5, 1, 0).is_none());
+        assert!(sequence.get_item(10, 1, 0).is_none());
+    }
+
+    #[test]
+    fn len_with_sequence_and_horizon_parameters() {
+        // Behavior: len(sequence_length, prediction_horizon) returns the number of valid items.
+        // Formula: count - sequence_length - prediction_horizon + 1
+        let sequence = create_test_sequence(10);
+
+        // len(1, 0) = 10 - 1 - 0 + 1 = 10
+        assert_eq!(sequence.len(1, 0), 10);
+
+        // len(2, 0) = 10 - 2 - 0 + 1 = 9
+        assert_eq!(sequence.len(2, 0), 9);
+
+        // len(1, 1) = 10 - 1 - 1 + 1 = 9
+        assert_eq!(sequence.len(1, 1), 9);
+
+        // len(3, 2) = 10 - 3 - 2 + 1 = 6
+        assert_eq!(sequence.len(3, 2), 6);
+    }
+
+    #[test]
+    fn split_creates_two_sequences() {
+        // Behavior: split(factor) divides the sequence at factor*count into train and validation.
+        // Factor=0.6 on 10 items -> 6 train, 4 validation
+        let sequence = create_test_sequence(10);
+
+        let (train, validation) = sequence.split(0.6).unwrap();
+        assert_eq!(train.count, 6);
+        assert_eq!(validation.count, 4);
+    }
+
+    #[test]
+    fn split_preserves_data_integrity() {
+        // Behavior: train and validation sets contain the correct features and targets.
+        let sequence = create_test_sequence(5);
+
+        let (train, validation) = sequence.split(0.6).unwrap();
+        // train has 3 items (indices 0, 1, 2)
+        assert_eq!(train.features, vec![vec![0.0], vec![1.0], vec![2.0]]);
+        assert_eq!(train.targets, vec![vec![0.0], vec![1.0], vec![2.0]]);
+
+        // validation has 2 items (indices 3, 4)
+        assert_eq!(validation.features, vec![vec![3.0], vec![4.0]]);
+        assert_eq!(validation.targets, vec![vec![3.0], vec![4.0]]);
+    }
+
+    #[test]
+    fn split_factor_zero_produces_empty_train() {
+        // Behavior: split(0.0) produces an empty train set and validation with all items.
+        let sequence = create_test_sequence(5);
+
+        let (train, validation) = sequence.split(0.0).unwrap();
+        assert_eq!(train.count, 0);
+        assert_eq!(validation.count, 5);
+    }
+
+    #[test]
+    fn split_factor_one_produces_empty_validation() {
+        // Behavior: split(1.0) produces train with all items and empty validation.
+        let sequence = create_test_sequence(5);
+
+        let (train, validation) = sequence.split(1.0).unwrap();
+        assert_eq!(train.count, 5);
+        assert_eq!(validation.count, 0);
+    }
+
+    #[test]
+    fn split_factor_out_of_bounds_errors() {
+        // Behavior: split with factor < 0.0 or > 1.0 returns an error.
+        let sequence1 = create_test_sequence(5);
+        let sequence2 = create_test_sequence(5);
+
+        assert!(sequence1.split(-0.1).is_err());
+        assert!(sequence2.split(1.1).is_err());
     }
 }
