@@ -165,6 +165,7 @@ impl Ingestable for Csv {
     }
 }
 
+#[derive(Debug)]
 pub struct Sequence {
     count: usize,
     features: Vec<Vec<f32>>,
@@ -345,10 +346,14 @@ mod tests {
             cast.insert("dow".to_string(), dow);
 
             if let Some(value) = input.get("Value") {
-                let v = value
-                    .parse::<f32>()
-                    .map_err(|err| Error::CastingError(Box::new(err)))?;
-                cast.insert("Value".to_string(), v);
+                let trimmed = value.trim();
+                // Treat "NA" as missing (don't insert into cast)
+                if !trimmed.eq_ignore_ascii_case("NA") {
+                    let v = trimmed
+                        .parse::<f32>()
+                        .map_err(|err| Error::CastingError(Box::new(err)))?;
+                    cast.insert("Value".to_string(), v);
+                }
             }
 
             Ok(cast)
@@ -384,5 +389,92 @@ mod tests {
         assert_eq!(features[0][0], 2.0);
         // Target with prediction_horizon=0 is at the same position: Wednesday (dow=2)
         assert_eq!(target[0], 2.0);
+    }
+
+    #[test]
+    fn test_multiple_features_and_targets() {
+        // Behavior: multiple Extract pipelines should produce multiple columns in features and targets.
+        let csv_path = "/tmp/test_ingest_multi.csv";
+        let mut file = File::create(csv_path).unwrap();
+        writeln!(file, "Year,Month,Day,Value").unwrap();
+        writeln!(file, "2025,1,15,5.5").unwrap();
+        writeln!(file, "2025,1,16,6.2").unwrap();
+
+        let mut csv = Csv {
+            path: csv_path.to_string(),
+            cast: Box::new(ExampleCast),
+            feature_pipelines: vec![Extract::new("dow"), Extract::new("Value")],
+            target_pipelines: vec![Extract::new("Value"), Extract::new("dow")],
+        };
+
+        let sequence = csv.ingest().unwrap();
+        assert_eq!(sequence.count, 2);
+
+        let (features, target) = sequence.get_item(0, 1, 0).unwrap();
+        // Two features: dow and Value
+        assert_eq!(features[0].len(), 2);
+        assert_eq!(features[0][0], 2.0); // dow for Wednesday
+        assert_eq!(features[0][1], 5.5); // Value
+        // Two targets: Value and dow
+        assert_eq!(target.len(), 2);
+        assert_eq!(target[0], 5.5); // Value
+        assert_eq!(target[1], 2.0); // dow
+    }
+
+    #[test]
+    fn test_prediction_horizon_offsets_target() {
+        // Behavior: with prediction_horizon > 0, the target should be offset to a future row.
+        // prediction_horizon=1 means target is 1 row ahead.
+        let csv_path = "/tmp/test_ingest_horizon.csv";
+        let mut file = File::create(csv_path).unwrap();
+        writeln!(file, "Year,Month,Day,Value").unwrap();
+        writeln!(file, "2025,1,15,5.5").unwrap();
+        writeln!(file, "2025,1,16,6.2").unwrap();
+        writeln!(file, "2025,1,17,7.1").unwrap();
+
+        let mut csv = Csv {
+            path: csv_path.to_string(),
+            cast: Box::new(ExampleCast),
+            feature_pipelines: vec![Extract::new("Value")],
+            target_pipelines: vec![Extract::new("Value")],
+        };
+
+        let sequence = csv.ingest().unwrap();
+        // With sequence_length=1 and prediction_horizon=1, we can have 1 complete item (3 - 1 - 1 = 1)
+        let (features, target) = sequence.get_item(0, 1, 1).unwrap();
+        // Features: row 0 (Value=5.5)
+        assert_eq!(features[0][0], 5.5);
+        // Target: row 1 (Value=6.2) because prediction_horizon=1 offsets by 1
+        assert_eq!(target[0], 6.2);
+    }
+
+    #[test]
+    fn test_interpolation_fills_gaps() {
+        // Behavior: with linear interpolation, gaps in data can be filled using history.
+        use crate::core::interpolation::{Interpolation, LinearInterpolator};
+
+        let csv_path = "/tmp/test_ingest_interp.csv";
+        let mut file = File::create(csv_path).unwrap();
+        writeln!(file, "Year,Month,Day,Value").unwrap();
+        // Values form a linear pattern: 10, 20, NA -> should interpolate to 30
+        writeln!(file, "2025,1,15,10.0").unwrap();
+        writeln!(file, "2025,1,16,20.0").unwrap();
+        writeln!(file, "2025,1,17,NA").unwrap();
+
+        let mut csv = Csv {
+            path: csv_path.to_string(),
+            cast: Box::new(ExampleCast),
+            feature_pipelines: vec![
+                Extract::new("Value")
+                    .with_interpolation(Interpolation::Linear(LinearInterpolator::new(2))),
+            ],
+            target_pipelines: vec![Extract::new("dow")],
+        };
+
+        let sequence = csv.ingest().unwrap();
+        assert_eq!(sequence.count, 3);
+        // Third row should be interpolated to 30.0
+        let (features, _target) = sequence.get_item(2, 1, 0).unwrap();
+        assert!((features[0][0] - 30.0).abs() < 1e-4);
     }
 }
