@@ -53,3 +53,7 @@ path = "src/bin/server.rs"
 [[bin]]
 name = "train_worker"
 path = "src/bin/train_worker.rs"
+
+[[bin]]
+name = "beijing"
+path = "src/optimizations/beijing_air_quality/bin/main.rs"

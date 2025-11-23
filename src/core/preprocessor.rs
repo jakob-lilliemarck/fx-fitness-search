@@ -1,10 +1,11 @@
-use crate::core::ingestion;
+use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::{collections::VecDeque, fmt::Display};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Roc {
     offset: usize,
+    #[serde(skip, default)]
     buffer: VecDeque<f32>,
 }
 
@@ -33,7 +34,7 @@ impl Roc {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Sin {
     period: f32,
 }
@@ -48,7 +49,7 @@ impl Sin {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Cos {
     period: f32,
 }
@@ -63,15 +64,17 @@ impl Cos {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Ema {
     /// The window size of this ema
     pub(crate) window: usize,
     /// Ema alpha, the "smoothing" factor
     pub(crate) alpha: f32,
     /// The current value
+    #[serde(skip, default)]
     pub(crate) value: f32,
     /// Count to track window size saturation
+    #[serde(skip, default)]
     pub(crate) count: usize,
 }
 
@@ -105,9 +108,10 @@ impl Ema {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Std {
     window: usize,
+    #[serde(skip, default)]
     buffer: VecDeque<f32>,
 }
 
@@ -137,10 +141,13 @@ impl Std {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZScore {
     pub(crate) window: usize,
-    pub(crate) values: VecDeque<f32>, // Ring buffer of recent values
+    /// Ring buffer of recent values
+    #[serde(skip, default)]
+    pub(crate) values: VecDeque<f32>,
+    #[serde(skip, default)]
     pub(crate) count: usize,
 }
 
@@ -185,7 +192,7 @@ impl ZScore {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Node {
     Roc(Roc),
     Cos(Cos),
@@ -354,16 +361,6 @@ impl Node {
             Self::Ema(ema) => ema.process(value),
             Self::ZScore(zscore) => zscore.process(value),
         }
-    }
-}
-
-impl ingestion::Process for Node {
-    fn process(&mut self, input: f32) -> Option<f32> {
-        self.process(input)
-    }
-
-    fn clone_box(&self) -> Box<dyn ingestion::Process> {
-        Box::new(self.clone())
     }
 }
 

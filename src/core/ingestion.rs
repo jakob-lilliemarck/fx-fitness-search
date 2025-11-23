@@ -1,7 +1,7 @@
+use crate::core::{dataset::Metadata, interpolation::Interpolation, preprocessor::Node};
 use burn::data::dataset::Dataset;
-
-use crate::core::dataset::Metadata;
-use std::collections::{HashMap, VecDeque};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -13,84 +13,92 @@ pub enum Error {
     NoneAfterSaturation,
     #[error("Factor out of bounds")]
     FactorOutOfBounds,
+    #[error("CastingError")]
+    CastingError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("InterpolationError")]
+    InterpolationError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("ProcessingError")]
+    ProcessingError(Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// Cast from string value to Option<f32> where None represents missing values
 pub trait Cast: Send {
-    fn cast(&self, input: &HashMap<String, String>) -> Result<Option<f32>, Error>;
+    fn cast(&self, input: &HashMap<String, String>) -> Result<HashMap<String, f32>, Error>;
     fn clone_box(&self) -> Box<dyn Cast>;
 }
 
-/// Interpolate missing values
-pub trait Interpolate: Send {
-    fn interpolate(&mut self, input: Option<f32>) -> Result<f32, Error>;
-    fn clone_box(&self) -> Box<dyn Interpolate>;
+// Transforms are processed in order
+// Values occupy the position at which point they were tranformed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Extract {
+    source: String,
+    description: String,
+    interpolation: Interpolation,
+    nodes: Vec<Node>,
 }
 
-/// Process an f32 value
-pub trait Process: Send {
-    fn process(&mut self, input: f32) -> Option<f32>;
-    fn clone_box(&self) -> Box<dyn Process>;
-}
-
-pub struct Pipeline {
-    caster: Box<dyn Cast>,
-    interpolator: Box<dyn Interpolate>,
-    processors: Vec<Box<dyn Process>>,
-    destination: String,
-}
-
-impl Clone for Pipeline {
-    fn clone(&self) -> Self {
+impl Extract {
+    pub fn new(source: &str, description: &str) -> Self {
         Self {
-            caster: self.caster.clone_box(),
-            interpolator: self.interpolator.clone_box(),
-            processors: self.processors.iter().map(|p| p.clone_box()).collect(),
-            destination: self.destination.clone(),
+            source: source.to_string(),
+            description: description.to_string(),
+            interpolation: Interpolation::Error,
+            nodes: Vec::new(),
         }
+    }
+
+    pub fn with_node(mut self, n: Node) -> Self {
+        self.nodes.push(n);
+        self
+    }
+
+    pub fn with_interpolation(mut self, i: Interpolation) -> Self {
+        self.interpolation = i;
+        self
     }
 }
 
 pub trait Ingestable {
     fn ingest(&mut self) -> Result<Sequence, Error>;
-    fn headers(&self) -> Vec<String>;
+    fn descriptions(&self) -> Vec<String>;
 }
 
 pub struct Csv {
     path: String,
-    feature_pipelines: Vec<Pipeline>,
-    target_pipelines: Vec<Pipeline>,
+    cast: Box<dyn Cast>,
+    feature_pipelines: Vec<Extract>,
+    target_pipelines: Vec<Extract>,
 }
 
 impl Csv {
     pub fn new(
         path: String,
-        feature_pipelines: Vec<Pipeline>,
-        target_pipelines: Vec<Pipeline>,
+        cast: Box<dyn Cast>,
+        feature_pipelines: Vec<Extract>,
+        target_pipelines: Vec<Extract>,
     ) -> Self {
         Csv {
             path,
+            cast,
             feature_pipelines,
             target_pipelines,
         }
     }
 
-    fn process_row(
-        p: &mut [Pipeline],
-        r: &HashMap<String, String>,
-    ) -> Result<Option<Vec<f32>>, Error> {
-        let mut row = Vec::with_capacity(p.len());
+    fn process_row(t: &mut [Extract], r: &HashMap<String, f32>) -> Result<Option<Vec<f32>>, Error> {
+        let mut row = Vec::with_capacity(t.len());
         let mut has_none = false;
-        for p in p.iter_mut() {
-            let casted = p.caster.cast(&r)?;
-            let interpolated = p.interpolator.interpolate(casted)?;
+        for t in t.iter_mut() {
+            let input = r.get(&t.source).map(Clone::clone);
 
-            let mut processed = Some(interpolated);
-            for processor in &mut p.processors {
-                processed = processed.and_then(|v| processor.process(v));
+            let mut output = t.interpolation.interpolate(input)?;
+
+            for processor in &mut t.nodes {
+                output = output.and_then(|v| processor.process(v));
             }
 
-            match processed {
+            // Only push if there is a value
+            match output {
                 Some(value) => {
                     if !has_none {
                         row.push(value)
@@ -105,10 +113,10 @@ impl Csv {
 }
 
 impl Ingestable for Csv {
-    fn headers(&self) -> Vec<String> {
+    fn descriptions(&self) -> Vec<String> {
         self.feature_pipelines
             .iter()
-            .map(|p| p.destination.to_string())
+            .map(|p| p.description.to_string())
             .collect::<Vec<String>>()
     }
 
@@ -132,9 +140,11 @@ impl Ingestable for Csv {
                 .map(|(h, v)| (h.to_string(), v.to_string()))
                 .collect();
 
-            let features = Self::process_row(&mut self.feature_pipelines, &record)?;
+            let casted = self.cast.cast(&record)?;
 
-            let targets = Self::process_row(&mut self.target_pipelines, &record)?;
+            let features = Self::process_row(&mut self.feature_pipelines, &casted)?;
+
+            let targets = Self::process_row(&mut self.target_pipelines, &casted)?;
 
             match (features, targets, seen_complete) {
                 (Some(features), Some(targets), _) => {
@@ -345,97 +355,22 @@ impl Dataset<(Vec<Vec<f32>>, Vec<f32>)> for ManySequencesAdapter {
     }
 }
 
-#[derive(Clone)]
-pub struct LinearInterpolator {
-    window_size: usize,
-    prev_values: VecDeque<Option<f32>>,
-}
-
-impl LinearInterpolator {
-    pub fn new(window_size: usize) -> Self {
-        Self {
-            window_size,
-            prev_values: VecDeque::with_capacity(window_size),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ErrorInterpolator;
-
-impl Interpolate for ErrorInterpolator {
-    fn interpolate(&mut self, input: Option<f32>) -> Result<f32, Error> {
-        input.ok_or_else(|| Error::NotEnoughHistory("Missing value not allowed".into()))
-    }
-
-    fn clone_box(&self) -> Box<dyn Interpolate> {
-        Box::new(self.clone())
-    }
-}
-
-impl Interpolate for LinearInterpolator {
-    fn interpolate(&mut self, input: Option<f32>) -> Result<f32, Error> {
-        if let Some(value) = input {
-            self.prev_values.push_back(Some(value));
-            if self.prev_values.len() > self.window_size {
-                self.prev_values.pop_front();
-            }
-            return Ok(value);
-        }
-
-        if self.prev_values.len() < 2 {
-            return Err(Error::NotEnoughHistory(
-                "Not enough history for interpolation".into(),
-            ));
-        }
-
-        let values: Vec<f32> = self.prev_values.iter().filter_map(|v| *v).collect();
-
-        if values.len() < 2 {
-            return Err(Error::NotEnoughHistory(
-                "Cannot interpolate with insufficient non-None values".into(),
-            ));
-        }
-
-        // Fit line: y = mx + b
-        let n = values.len() as f32;
-        let x_mean = (n - 1.0) / 2.0;
-        let y_mean = values.iter().sum::<f32>() / n;
-
-        let slope = values
-            .iter()
-            .enumerate()
-            .map(|(i, &y)| (i as f32 - x_mean) * (y - y_mean))
-            .sum::<f32>()
-            / values
-                .iter()
-                .enumerate()
-                .map(|(i, _)| (i as f32 - x_mean).powi(2))
-                .sum::<f32>();
-
-        let intercept = y_mean - slope * x_mean;
-        let next_x = values.len() as f32;
-
-        Ok(slope * next_x + intercept)
-    }
-
-    fn clone_box(&self) -> Box<dyn Interpolate> {
-        Box::new(self.clone())
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::core::preprocessor::{Cos, Node, Sin};
+
     use super::*;
     use chrono::{Datelike, NaiveDate};
     use std::fs::File;
     use std::io::Write;
 
     #[derive(Clone)]
-    struct DayOfWeekCaster;
+    struct ExampleCast;
 
-    impl Cast for DayOfWeekCaster {
-        fn cast(&self, input: &HashMap<String, String>) -> Result<Option<f32>, Error> {
+    impl Cast for ExampleCast {
+        fn cast(&self, input: &HashMap<String, String>) -> Result<HashMap<String, f32>, Error> {
+            let mut cast = HashMap::with_capacity(2);
+
             let year = input
                 .get("Year")
                 .and_then(|y| y.parse::<i32>().ok())
@@ -451,11 +386,13 @@ mod tests {
                 .and_then(|d| d.parse::<u32>().ok())
                 .ok_or_else(|| Error::NotEnoughHistory("Missing or invalid Day".into()))?;
 
-            let date = NaiveDate::from_ymd_opt(year, month, day)
+            let dow = NaiveDate::from_ymd_opt(year, month, day)
+                .map(|d| (d.weekday().number_from_monday() - 1) as f32)
                 .ok_or_else(|| Error::NotEnoughHistory("Invalid date".into()))?;
 
-            let dow = date.weekday().number_from_monday() as f32 - 1.0;
-            Ok(Some(dow))
+            cast.insert("dow".to_string(), dow);
+
+            Ok(cast)
         }
 
         fn clone_box(&self) -> Box<dyn Cast> {
@@ -472,28 +409,20 @@ mod tests {
         writeln!(file, "2025,1,16,6.2").unwrap();
         writeln!(file, "2025,1,17,7.1").unwrap();
 
-        let feature_pipeline = Pipeline {
-            caster: Box::new(DayOfWeekCaster),
-            interpolator: Box::new(ErrorInterpolator),
-            processors: vec![],
-            destination: "day_of_week".to_string(),
-        };
-
-        let target_pipeline = Pipeline {
-            caster: Box::new(DayOfWeekCaster),
-            interpolator: Box::new(ErrorInterpolator),
-            processors: vec![],
-            destination: "target".to_string(),
-        };
-
         let mut csv = Csv {
             path: csv_path.to_string(),
-            feature_pipelines: vec![feature_pipeline],
-            target_pipelines: vec![target_pipeline],
+            cast: Box::new(ExampleCast),
+            feature_pipelines: vec![
+                Extract::new("dow", "Cosine transform for day of week")
+                    .with_node(Node::Cos(Cos::new(7.0))),
+                Extract::new("dow", "Sine transform for day of week")
+                    .with_node(Node::Sin(Sin::new(7.0))),
+            ],
+            target_pipelines: vec![Extract::new("dow", "Day of week")],
         };
 
         let sequence = csv.ingest().unwrap();
-        assert_eq!(csv.headers(), vec!["day_of_week"]);
+        assert_eq!(csv.descriptions(), vec!["day_of_week"]);
         assert_eq!(sequence.count, 3);
 
         let (features, target) = sequence.get_item(0, 1, 0).unwrap();

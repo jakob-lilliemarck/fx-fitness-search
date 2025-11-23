@@ -1,9 +1,10 @@
 use crate::core::dataset::DatasetBuilder;
-use crate::core::ingestion::{self, Csv, Ingestable, ManySequences, Pipeline};
+use crate::core::ingestion::{Csv, Extract, Ingestable, ManySequences};
 use crate::core::preprocessor::Transform;
+use crate::optimizations::beijing_air_quality::cast::BeijingCast;
 use std::collections::HashMap;
 
-use super::parser::read_csv;
+use super::parse::read_csv;
 
 // Valid source columns from Beijing air quality CSV files
 // These are columns that can be converted to f32 for preprocessing
@@ -127,17 +128,20 @@ pub fn build_dataset_from_file(
 }
 
 pub async fn ingest(
-    feature_pipelines: Vec<Pipeline>,
-    target_pipelines: Vec<Pipeline>,
+    feature_pipelines: Vec<Extract>,
+    target_pipelines: Vec<Extract>,
 ) -> anyhow::Result<ManySequences> {
     let mut set = tokio::task::JoinSet::new();
 
     for path in PATHS {
         let pipelines_f = feature_pipelines.clone();
+
         let pipelines_t = target_pipelines.clone();
+
         let path = path.to_string();
+
         set.spawn(async move {
-            let mut ingestable = Csv::new(path, pipelines_f, pipelines_t);
+            let mut ingestable = Csv::new(path, Box::new(BeijingCast), pipelines_f, pipelines_t);
             ingestable.ingest()
         });
     }
