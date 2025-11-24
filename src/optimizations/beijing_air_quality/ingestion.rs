@@ -16,21 +16,15 @@ pub const PATHS: &[&str] = &[
     "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanshouxigong_20130301-20170228.csv",
 ];
 
-pub async fn ingest(
-    feature_pipelines: Vec<Extract>,
-    target_pipelines: Vec<Extract>,
-) -> anyhow::Result<ManySequences> {
+pub async fn ingest(features: &[Extract], targets: &[Extract]) -> anyhow::Result<ManySequences> {
     let mut set = tokio::task::JoinSet::new();
 
     for path in PATHS {
-        let pipelines_f = feature_pipelines.clone();
-
-        let pipelines_t = target_pipelines.clone();
-
+        let features = features.to_vec();
+        let targets = targets.to_vec();
         let path = path.to_string();
-
         set.spawn(async move {
-            let mut ingestable = Csv::new(path, Box::new(BeijingCast), pipelines_f, pipelines_t);
+            let mut ingestable = Csv::new(path, Box::new(BeijingCast), features, targets);
             ingestable.ingest()
         });
     }
@@ -50,19 +44,21 @@ pub async fn ingest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::interpolation::{LinearInterpolator, Interpolation};
+    use crate::core::interpolation::{Interpolation, LinearInterpolator};
 
     #[tokio::test]
     async fn test_ingest_with_linear_interpolation_window_1() {
-        let feature_pipelines = vec![
-            Extract::new("PM2.5").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
-            Extract::new("PM10").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
-        ];
-        let target_pipelines = vec![
-            Extract::new("O3").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+        let features = &[
+            Extract::new("PM2.5")
+                .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+            Extract::new("PM10")
+                .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
         ];
 
-        let result = ingest(feature_pipelines, target_pipelines).await;
+        let targets = &[Extract::new("O3")
+            .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1)))];
+
+        let result = ingest(features, targets).await;
         assert!(result.is_ok());
 
         let sequences = result.unwrap();
@@ -71,16 +67,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_ingest_multiple_extracts() {
-        let feature_pipelines = vec![
-            Extract::new("PM2.5").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
-            Extract::new("TEMP").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
-            Extract::new("WSPM").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
-        ];
-        let target_pipelines = vec![
-            Extract::new("PM10").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+        let features = &[
+            Extract::new("PM2.5")
+                .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+            Extract::new("TEMP")
+                .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+            Extract::new("WSPM")
+                .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
         ];
 
-        let result = ingest(feature_pipelines, target_pipelines).await;
+        let targets = &[Extract::new("PM10")
+            .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1)))];
+
+        let result = ingest(features, targets).await;
         assert!(result.is_ok());
     }
 }

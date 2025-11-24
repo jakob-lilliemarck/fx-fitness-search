@@ -28,9 +28,9 @@ impl<B: Backend> InferenceEngine<B> {
         // Instantiate FeedForward with config params
         let model = FeedForward::<B>::new(
             device,
-            config.input_size,
+            config.features.len(),
             config.hidden_size,
-            config.output_size,
+            config.targets.len(),
             config.sequence_length,
         );
 
@@ -49,7 +49,7 @@ impl<B: Backend> InferenceEngine<B> {
         // Create SequenceDatasetItem from sequence
         let item = SequenceDatasetItem {
             features: sequence,
-            target: vec![0.0; self.config.output_size], // Placeholder, not used in inference
+            target: vec![0.0; self.config.targets.len()], // Placeholder, not used in inference
         };
 
         // Batch it (batch size = 1)

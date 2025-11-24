@@ -1,0 +1,29 @@
+{
+  "genotype_id": "550e8400-e29b-41d4-a716-446655440000",
+  "train_config": {
+    "hidden_size": 16,
+    "sequence_length": 24,
+    "prediction_horizon": 1,
+    "features": [
+      {
+        "source": "TEMP",
+        "interpolation": { "Linear": { "window_size": 2 } },
+        "nodes": [{ "ZScore": { "window": 16 } }]
+      },
+      {
+        "source": "PRES",
+        "interpolation": { "Linear": { "window_size": 2 } },
+        "nodes": [{ "ZScore": { "window": 16 } }]
+      },
+      {
+        "source": "WSPM",
+        "interpolation": { "Linear": { "window_size": 2 } },
+        "nodes": [{ "ZScore": { "window": 16 } }]
+      }
+    ],
+    "targets": []
+  },
+  "epochs": 2,
+  "batch_size": 32,
+  "learning_rate": 0.001
+}

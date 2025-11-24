@@ -337,6 +337,8 @@ impl App {
         // Run required migrations migrations
         fx_durable_ga::migrations::run_default_migrations(&pool).await?;
 
+        tracing::info!(conf=?conf);
+
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(
             fx_durable_ga::bootstrap(pool.clone())

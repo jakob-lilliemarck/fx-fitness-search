@@ -22,26 +22,30 @@ pub trait Genotype {
 }
 
 impl Genotype for Roc {
-    type Phenotype = Node;
+    type Phenotype = Roc;
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let lower = 0;
-        let upper = 100;
-        let steps = 101;
+        let upper = 5;
+        let steps = 6;
         let bounds = GeneBounds::integer(lower, upper, steps)?;
         Ok(vec![bounds])
     }
 
     fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
-        let gene = match phenotype {
-            Node::Noop => 0,
-            Node::Roc(Roc { offset, .. }) => {
-                if *offset > 100 {
-                    return Err(Error::Encode(format!("Unexpected Roc offset: {}", offset)));
-                }
-                *offset as i64
+        let gene = match phenotype.offset {
+            2 => 0,
+            4 => 1,
+            8 => 2,
+            16 => 3,
+            32 => 4,
+            64 => 5,
+            _ => {
+                return Err(Error::Encode(format!(
+                    "Unexpected Roc offset: {}",
+                    phenotype.offset
+                )));
             }
-            _ => return Err(Error::Encode(format!("Unexpected node type"))),
         };
         Ok(vec![gene])
     }
@@ -53,36 +57,44 @@ impl Genotype for Roc {
             ));
         }
 
-        let offset = genes[0] as usize;
-        if offset == 0 {
-            Ok(Node::Noop)
-        } else {
-            Ok(Node::Roc(Roc::new(offset)))
-        }
+        let offset = match genes[0] {
+            0 => 2,
+            1 => 4,
+            2 => 8,
+            3 => 16,
+            4 => 32,
+            5 => 64,
+            _ => return Err(Error::Decode(format!("Unexpected Roc gene: {}", genes[0]))),
+        };
+        Ok(Roc::new(offset))
     }
 }
 
 impl Genotype for Std {
-    type Phenotype = Node;
+    type Phenotype = Std;
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let lower = 0;
-        let upper = 100;
-        let steps = 101;
+        let upper = 5;
+        let steps = 6;
         let bounds = GeneBounds::integer(lower, upper, steps)?;
         Ok(vec![bounds])
     }
 
     fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
-        let gene = match phenotype {
-            Node::Noop => 0,
-            Node::Std(Std { window, .. }) => {
-                if *window > 100 {
-                    return Err(Error::Encode(format!("Unexpected Std window: {}", window)));
-                }
-                *window as i64
+        let gene = match phenotype.window {
+            2 => 0,
+            4 => 1,
+            8 => 2,
+            16 => 3,
+            32 => 4,
+            64 => 5,
+            _ => {
+                return Err(Error::Encode(format!(
+                    "Unexpected Std window: {}",
+                    phenotype.window
+                )));
             }
-            _ => return Err(Error::Encode(format!("Unexpected node type"))),
         };
         Ok(vec![gene])
     }
@@ -94,37 +106,41 @@ impl Genotype for Std {
             ));
         }
 
-        let window = genes[0] as usize;
-        if window == 0 {
-            Ok(Node::Noop)
-        } else {
-            Ok(Node::Std(Std::new(window)))
-        }
+        let window = match genes[0] {
+            0 => 2,
+            1 => 4,
+            2 => 8,
+            3 => 16,
+            4 => 32,
+            5 => 64,
+            _ => return Err(Error::Decode(format!("Unexpected Std gene: {}", genes[0]))),
+        };
+        Ok(Std::new(window))
     }
 }
 
 impl Genotype for Ema {
-    type Phenotype = Node;
+    type Phenotype = Ema;
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let lower = 0;
-        let upper = 100;
-        let steps = 101;
+        let upper = 5;
+        let steps = 6;
         let bounds = GeneBounds::integer(lower, upper, steps)?;
         Ok(vec![bounds])
     }
 
     fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
-        let gene = match phenotype {
-            Node::Noop => 0,
-            Node::Ema(Ema { window, .. }) => {
-                if *window > 100 {
-                    return Err(Error::Encode(format!("Unexpected Ema window: {}", window)));
-                }
-                *window as i64
-            }
-            _ => return Err(Error::Encode(format!("Unexpected node type"))),
+        let gene = match phenotype.window {
+            2 => 0,
+            4 => 1,
+            8 => 2,
+            16 => 3,
+            32 => 4,
+            64 => 5,
+            _ => return Err(Error::Encode(format!("Unexpected Ema window: {}", phenotype.window))),
         };
+
         Ok(vec![gene])
     }
 
@@ -135,40 +151,45 @@ impl Genotype for Ema {
             ));
         }
 
-        let window = genes[0] as usize;
-        if window == 0 {
-            Ok(Node::Noop)
-        } else {
-            let alpha = 2.0 / (window + 1) as f32;
-            Ok(Node::Ema(Ema::new(window, alpha)))
-        }
+        let window = match genes[0] {
+            0 => 2,
+            1 => 4,
+            2 => 8,
+            3 => 16,
+            4 => 32,
+            5 => 64,
+            _ => return Err(Error::Decode(format!("Unexpected Ema gene: {}", genes[0]))),
+        };
+        let alpha = 2.0 / (window + 1) as f32;
+        Ok(Ema::new(window, alpha))
     }
 }
 
 impl Genotype for ZScore {
-    type Phenotype = Node;
+    type Phenotype = ZScore;
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let lower = 0;
-        let upper = 100;
-        let steps = 101;
+        let upper = 5;
+        let steps = 6;
         let bounds = GeneBounds::integer(lower, upper, steps)?;
         Ok(vec![bounds])
     }
 
     fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
-        let gene = match phenotype {
-            Node::Noop => 0,
-            Node::ZScore(ZScore { window, .. }) => {
-                if *window > 100 {
-                    return Err(Error::Encode(format!(
-                        "Unexpected ZScore window: {}",
-                        window
-                    )));
-                }
-                *window as i64
+        let gene = match phenotype.window {
+            2 => 0,
+            4 => 1,
+            8 => 2,
+            16 => 3,
+            32 => 4,
+            64 => 5,
+            _ => {
+                return Err(Error::Encode(format!(
+                    "Unexpected ZScore window: {}",
+                    phenotype.window
+                )));
             }
-            _ => return Err(Error::Encode(format!("Unexpected node type"))),
         };
         Ok(vec![gene])
     }
@@ -180,12 +201,21 @@ impl Genotype for ZScore {
             ));
         }
 
-        let window = genes[0] as usize;
-        if window == 0 {
-            Ok(Node::Noop)
-        } else {
-            Ok(Node::ZScore(ZScore::new(window)))
-        }
+        let window = match genes[0] {
+            0 => 2,
+            1 => 4,
+            2 => 8,
+            3 => 16,
+            4 => 32,
+            5 => 64,
+            _ => {
+                return Err(Error::Decode(format!(
+                    "Unexpected ZScore gene: {}",
+                    genes[0]
+                )));
+            }
+        };
+        Ok(ZScore::new(window))
     }
 }
 
@@ -240,6 +270,38 @@ impl Genotype for Interpolation {
         };
 
         Ok(interpolation)
+    }
+}
+
+pub struct Toggle<T: Genotype> {
+    on: bool,
+    source: T,
+}
+
+impl<T: Genotype> Genotype for Toggle<T> {
+    type Phenotype = (bool, T::Phenotype);
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let mut bounds = vec![GeneBounds::integer(0, 1, 2)?]; // on/off
+        bounds.extend(T::morphology()?);
+        Ok(bounds)
+    }
+
+    fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
+        let mut genes = vec![if phenotype.0 { 1 } else { 0 }];
+        genes.extend(T::encode(&phenotype.1)?);
+        Ok(genes)
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.is_empty() {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
+        }
+        let enabled = genes[0] != 0;
+        let inner = T::decode(&genes[1..])?;
+        Ok((enabled, inner))
     }
 }
 
@@ -303,28 +365,130 @@ impl Genotype for Optimizable {
     }
 }
 
-impl Genotype for Extract {
-    type Phenotype = Extract;
+pub enum NodeType {
+    Std,
+    Ema,
+    Roc,
+    ZScore,
+}
+
+impl Genotype for NodeType {
+    type Phenotype = NodeType;
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
-        let mut bounds = Vec::with_capacity(10);
-        bounds.extend(Optimizable::morphology()?);
-        bounds.extend(Interpolation::morphology()?);
-        // Layer 1: ZScore, Roc, Std, Ema
-        bounds.extend(ZScore::morphology()?);
-        bounds.extend(Roc::morphology()?);
-        bounds.extend(Std::morphology()?);
-        bounds.extend(Ema::morphology()?);
-        // Layer 2: ZScore, Roc, Std, Ema
-        bounds.extend(ZScore::morphology()?);
-        bounds.extend(Roc::morphology()?);
-        bounds.extend(Std::morphology()?);
-        bounds.extend(Ema::morphology()?);
+        let lower = 0;
+        let upper = 3;
+        let steps = 4;
+        let bounds = GeneBounds::integer(lower, upper, steps)?;
+        Ok(vec![bounds])
+    }
+
+    fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
+        let gene = match phenotype {
+            NodeType::Std => 0,
+            NodeType::Roc => 1,
+            NodeType::Ema => 2,
+            NodeType::ZScore => 3,
+        };
+        Ok(vec![gene])
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 1 {
+            return Err(Error::Decode(
+                "Could not decode genes of unexpected length".to_string(),
+            ));
+        }
+
+        let node_type = match genes[0] {
+            0 => NodeType::Std,
+            1 => NodeType::Roc,
+            2 => NodeType::Ema,
+            3 => NodeType::ZScore,
+            _ => {
+                return Err(Error::Decode(
+                    "Could not decode unexpected gene value to Optimizable".to_string(),
+                ));
+            }
+        };
+
+        Ok(node_type)
+    }
+}
+
+impl Genotype for Node {
+    type Phenotype = Node;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let mut bounds = Vec::with_capacity(3);
+        bounds.push(GeneBounds::integer(0, 1, 2)?);     // enabled: 0-1
+        bounds.extend(NodeType::morphology()?);        // type: 0-3
+        bounds.push(GeneBounds::integer(0, 5, 6)?);    // variant: 0-5
         Ok(bounds)
     }
 
     fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
-        let mut genes = Vec::with_capacity(10);
+        let mut genes = vec![1]; // enabled=1
+
+        match phenotype {
+            Node::ZScore(zs) => {
+                genes.extend(NodeType::encode(&NodeType::ZScore)?);
+                genes.extend(ZScore::encode(zs)?);
+            }
+            Node::Roc(roc) => {
+                genes.extend(NodeType::encode(&NodeType::Roc)?);
+                genes.extend(Roc::encode(roc)?);
+            }
+            Node::Std(std) => {
+                genes.extend(NodeType::encode(&NodeType::Std)?);
+                genes.extend(Std::encode(std)?);
+            }
+            Node::Ema(ema) => {
+                genes.extend(NodeType::encode(&NodeType::Ema)?);
+                genes.extend(Ema::encode(ema)?);
+            }
+            _ => return Err(Error::Encode("Unexpected node type".to_string())),
+        }
+        Ok(genes)
+    }
+
+    fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
+        if genes.len() != 3 {
+            return Err(Error::Decode(format!("Expected 3 genes for Node, got {}", genes.len())));
+        }
+
+        // If disabled (genes[0] == 0), return error—caller won't add to Vec
+        if genes[0] == 0 {
+            return Err(Error::Decode("Node is disabled".to_string()));
+        }
+
+        let node_type = NodeType::decode(&[genes[1]])?;
+
+        match node_type {
+            NodeType::ZScore => Ok(Node::ZScore(ZScore::decode(&[genes[2]])?)),
+            NodeType::Roc => Ok(Node::Roc(Roc::decode(&[genes[2]])?)),
+            NodeType::Std => Ok(Node::Std(Std::decode(&[genes[2]])?)),
+            NodeType::Ema => Ok(Node::Ema(Ema::decode(&[genes[2]])?)),
+        }
+    }
+}
+
+impl Genotype for Extract {
+    type Phenotype = Extract;
+
+    fn morphology() -> Result<Vec<GeneBounds>, Error> {
+        let mut bounds = Vec::new();
+        bounds.extend(Optimizable::morphology()?);  // source: 1 gene
+        bounds.extend(Interpolation::morphology()?); // interpolation: 1 gene
+        // Layer 1: 3 genes (enabled, type, variant)
+        bounds.extend(Node::morphology()?);
+        // Layer 2: 3 genes (enabled, type, variant)
+        bounds.extend(Node::morphology()?);
+        Ok(bounds)
+    }
+
+    fn encode(phenotype: &Self::Phenotype) -> Result<Vec<i64>, Error> {
+        let mut genes = Vec::new();
 
         let optimizable: Optimizable = phenotype
             .source
@@ -335,32 +499,31 @@ impl Genotype for Extract {
         genes.extend(Optimizable::encode(&optimizable)?);
         genes.extend(Interpolation::encode(&phenotype.interpolation)?);
 
-        // Encode 8 nodes: [zscore_l1, roc_l1, std_l1, ema_l1, zscore_l2, roc_l2, std_l2, ema_l2]
-        if phenotype.nodes.len() != 8 {
-            return Err(Error::Encode(format!(
-                "Expected 8 nodes, got {}",
-                phenotype.nodes.len()
-            )));
+        // Encode up to 2 enabled layers
+        let mut layer_idx = 0;
+        for node in &phenotype.nodes {
+            if layer_idx >= 2 {
+                break;
+            }
+            genes.extend(Node::encode(node)?);
+            layer_idx += 1;
         }
 
-        // Layer 1
-        genes.extend(ZScore::encode(&phenotype.nodes[0])?);
-        genes.extend(Roc::encode(&phenotype.nodes[1])?);
-        genes.extend(Std::encode(&phenotype.nodes[2])?);
-        genes.extend(Ema::encode(&phenotype.nodes[3])?);
-        // Layer 2
-        genes.extend(ZScore::encode(&phenotype.nodes[4])?);
-        genes.extend(Roc::encode(&phenotype.nodes[5])?);
-        genes.extend(Std::encode(&phenotype.nodes[6])?);
-        genes.extend(Ema::encode(&phenotype.nodes[7])?);
+        // Pad remaining layers with disabled (0, 0, 0)
+        for _ in layer_idx..2 {
+            genes.push(0); // enabled=0
+            genes.push(0); // type (ignored)
+            genes.push(0); // variant (ignored)
+        }
 
         Ok(genes)
     }
 
     fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
-        if genes.len() != 10 {
+        if genes.len() != 8 {
+            // 1 (source) + 1 (interpolation) + 3 (layer 1) + 3 (layer 2)
             return Err(Error::Decode(format!(
-                "Expected 10 genes, got {}",
+                "Expected 8 genes, got {}",
                 genes.len()
             )));
         }
@@ -368,19 +531,23 @@ impl Genotype for Extract {
         let source = Optimizable::decode(&[genes[0]])?.to_string();
         let interpolation = Interpolation::decode(&[genes[1]])?;
 
-        // Decode 8 nodes: [zscore_l1, roc_l1, std_l1, ema_l1, zscore_l2, roc_l2, std_l2, ema_l2]
-        let nodes = vec![
-            // Layer 1
-            ZScore::decode(&[genes[2]])?,
-            Roc::decode(&[genes[3]])?,
-            Std::decode(&[genes[4]])?,
-            Ema::decode(&[genes[5]])?,
-            // Layer 2
-            ZScore::decode(&[genes[6]])?,
-            Roc::decode(&[genes[7]])?,
-            Std::decode(&[genes[8]])?,
-            Ema::decode(&[genes[9]])?,
-        ];
+        let mut nodes = Vec::new();
+
+        // Decode Layer 1 (genes 2-4)
+        if genes[2] != 0 {
+            // if enabled
+            if let Ok(node) = Node::decode(&genes[2..5]) {
+                nodes.push(node);
+            }
+        }
+
+        // Decode Layer 2 (genes 5-7)
+        if genes[5] != 0 {
+            // if enabled
+            if let Ok(node) = Node::decode(&genes[5..8]) {
+                nodes.push(node);
+            }
+        }
 
         Ok(Extract {
             source,
@@ -543,9 +710,11 @@ impl Encodeable for BeijingPhenotype {
     fn morphology() -> Vec<GeneBounds> {
         let mut bounds = Vec::new();
 
-        // 7 features, each with Extract morphology
+        // 7 features, each as Toggle<Extract>
         for _ in 0..FEATURE_COUNT {
-            bounds.extend(Extract::morphology().expect("Failed to get Extract morphology"));
+            bounds.extend(
+                Toggle::<Extract>::morphology().expect("Failed to get Toggle<Extract> morphology"),
+            );
         }
 
         // Hyperparameters
@@ -558,11 +727,45 @@ impl Encodeable for BeijingPhenotype {
     }
 
     fn encode(&self) -> Vec<i64> {
+        use std::collections::HashSet;
+
         let mut genes = Vec::new();
 
-        // Encode 7 features
-        for extract in &self.features {
-            genes.extend(Extract::encode(extract).expect("Failed to encode Extract"));
+        // Define the 7 feature sources in order
+        let feature_sources = [
+            Optimizable::Pm25,
+            Optimizable::Pm10,
+            Optimizable::So2,
+            Optimizable::No2,
+            Optimizable::Co,
+            Optimizable::O3,
+            Optimizable::Temp,
+        ];
+
+        // Build a set of enabled sources for quick lookup
+        let enabled_sources: HashSet<String> = self
+            .features
+            .iter()
+            .map(|extract| extract.source.clone())
+            .collect();
+
+        // Encode each feature slot
+        for optimizable in &feature_sources {
+            let source_str = optimizable.to_string();
+            let enabled = enabled_sources.contains(&source_str);
+
+            // Get the extract if enabled, otherwise create a dummy one
+            let extract = self
+                .features
+                .iter()
+                .find(|e| e.source == source_str)
+                .cloned()
+                .unwrap_or_else(|| Extract::new(&source_str));
+
+            genes.extend(
+                Toggle::<Extract>::encode(&(enabled, extract))
+                    .expect("Failed to encode Toggle<Extract>"),
+            );
         }
 
         // Encode hyperparameters
@@ -585,19 +788,25 @@ impl Encodeable for BeijingPhenotype {
         let mut features = Vec::new();
         let mut gene_offset = 0;
 
-        // Decode 7 features
+        // Decode 7 feature slots
         for _ in 0..FEATURE_COUNT {
-            let extract_morphology =
-                Extract::morphology().expect("Failed to get Extract morphology");
-            let extract_gene_count = extract_morphology.len();
+            let toggle_morphology =
+                Toggle::<Extract>::morphology().expect("Failed to get Toggle<Extract> morphology");
+            let toggle_gene_count = toggle_morphology.len();
             assert!(
-                gene_offset + extract_gene_count <= genes.len(),
-                "Not enough genes to decode Extract"
+                gene_offset + toggle_gene_count <= genes.len(),
+                "Not enough genes to decode Toggle<Extract>"
             );
-            let extract = Extract::decode(&genes[gene_offset..gene_offset + extract_gene_count])
-                .expect("Failed to decode Extract");
-            features.push(extract);
-            gene_offset += extract_gene_count;
+
+            let (enabled, extract) =
+                Toggle::<Extract>::decode(&genes[gene_offset..gene_offset + toggle_gene_count])
+                    .expect("Failed to decode Toggle<Extract>");
+
+            if enabled {
+                features.push(extract);
+            }
+
+            gene_offset += toggle_gene_count;
         }
 
         // Decode hyperparameters

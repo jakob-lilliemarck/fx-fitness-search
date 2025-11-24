@@ -1,33 +1,27 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use crate::core::ingestion::Extract;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TrainConfig {
     pub hidden_size: usize,
-    pub input_size: usize,
-    pub output_size: usize,
     pub sequence_length: usize,
     pub prediction_horizon: usize,
-    /// Feature definitions as strings: "temp=TEMP:ZSCORE(48)"
-    pub features: Vec<String>,
-    /// Target definitions as strings: "target_temp=TEMP"
-    pub targets: Vec<String>,
+    pub features: Vec<Extract>,
+    pub targets: Vec<Extract>,
 }
 
 impl TrainConfig {
     pub fn new(
-        input_size: usize,
         hidden_size: usize,
-        output_size: usize,
         sequence_length: usize,
         prediction_horizon: usize,
-        features: Vec<String>,
-        targets: Vec<String>,
+        features: Vec<Extract>,
+        targets: Vec<Extract>,
     ) -> Self {
         Self {
-            input_size,
             hidden_size,
-            output_size,
             sequence_length,
             prediction_horizon,
             features,

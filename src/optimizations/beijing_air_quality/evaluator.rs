@@ -1,5 +1,5 @@
 use super::phenotype::BeijingPhenotype;
-use crate::core::ingestion::Extract;
+use super::protocol::{Request, Response};
 use crate::core::train_config::TrainConfig;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};
@@ -9,11 +9,15 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use uuid::Uuid as GuidUuid;
 
-pub struct BeijingEvaluator;
+pub struct BeijingEvaluator {
+    model_save_path: Option<String>,
+}
 
 impl BeijingEvaluator {
-    pub fn new(_model_save_path: &str) -> Self {
-        Self
+    pub fn new(model_save_path: &str) -> Self {
+        Self {
+            model_save_path: Some(model_save_path.to_string()),
+        }
     }
 }
 
@@ -26,25 +30,6 @@ impl RequestVariables {
     pub fn new(prediction_horizon: usize) -> Self {
         Self { prediction_horizon }
     }
-}
-
-/// Request sent to training binary
-#[derive(Debug, Serialize)]
-struct TrainRequest {
-    genotype_id: GuidUuid,
-    train_config: TrainConfig,
-    processors_features: Vec<Extract>,
-    processors_targets: Vec<Extract>,
-    epochs: usize,
-    batch_size: usize,
-    learning_rate: f64,
-}
-
-/// Response from training binary
-#[derive(Debug, Deserialize)]
-struct TrainResponse {
-    fitness: f64,
-    genotype_id: GuidUuid,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +48,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
         request: &'a fx_durable_ga::models::Request,
         _terminated: &'a Box<dyn Terminated>,
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
+        let model_save_path = self.model_save_path.clone();
         Box::pin(async move {
             let req_var: RequestVariables =
                 serde_json::from_value(request.data.clone().ok_or(EvaluationError::MissingData)?)?;
@@ -77,27 +63,22 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
             let processors_targets = Vec::new();
 
             let train_config = TrainConfig::new(
-                processors_features.len(),
                 phenotype.hidden_size,
-                1, // output_size - always 1 target
                 phenotype.sequence_length,
                 req_var.prediction_horizon,
-                processors_features
-                    .iter()
-                    .map(|e| e.source.clone())
-                    .collect::<Vec<String>>(),
-                vec!["TEMP".to_string()],
+                processors_features,
+                processors_targets,
             );
 
             // Prepare request for training binary
-            let train_request = TrainRequest {
+            let train_request = Request {
                 genotype_id: GuidUuid::from_bytes(*genotype_id.as_bytes()),
                 train_config,
-                processors_features,
-                processors_targets,
                 epochs: 25,
                 batch_size: 100,
                 learning_rate: phenotype.learning_rate,
+                model_save_path: model_save_path
+                    .map(|p| format!("{}/{}", p, genotype_id.to_string())),
             };
 
             tracing::info!(
@@ -145,13 +126,9 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 }
 
                 // Parse response
-                let response: TrainResponse =
-                    serde_json::from_slice(&output.stdout).map_err(|e| {
-                        EvaluationError::WorkerFailed(format!(
-                            "Failed to parse binary response: {}",
-                            e
-                        ))
-                    })?;
+                let response: Response = serde_json::from_slice(&output.stdout).map_err(|e| {
+                    EvaluationError::WorkerFailed(format!("Failed to parse binary response: {}", e))
+                })?;
 
                 Ok(response)
             });

@@ -2,13 +2,12 @@ use fx_durable_ga_app::core::dataset::ManySequencesAdapter;
 use fx_durable_ga_app::core::interpolation::LinearInterpolator;
 use fx_durable_ga_app::core::model::{FeedForward, SequenceModel};
 use fx_durable_ga_app::core::preprocessor::{Cos, Node, Sin};
-use fx_durable_ga_app::core::{
-    ingestion::Extract, interpolation::Interpolation, train_config::TrainConfig,
+use fx_durable_ga_app::core::{ingestion::Extract, interpolation::Interpolation};
+use fx_durable_ga_app::optimizations::beijing_air_quality::{
+    ingest,
+    protocol::{Request, Response},
 };
-use fx_durable_ga_app::optimizations::beijing_air_quality::ingest;
-use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main() {
@@ -16,23 +15,6 @@ async fn main() {
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct Request {
-    genotype_id: Uuid,
-    train_config: TrainConfig,
-    processors_features: Vec<Extract>,
-    processors_targets: Vec<Extract>,
-    epochs: usize,
-    batch_size: usize,
-    learning_rate: f64,
-}
-
-#[derive(Debug, Serialize)]
-struct Response {
-    fitness: f64,
-    genotype_id: Uuid,
 }
 
 fn append_time_transform(extracts: &mut Vec<Extract>, key: &str, period: u32) {
@@ -52,27 +34,38 @@ async fn run() -> anyhow::Result<()> {
         genotype_id = ?request.genotype_id,
     );
 
-    // Add processors that should _always_ be used
-    append_time_transform(&mut request.processors_features, "month", 12);
-    append_time_transform(&mut request.processors_features, "day_of_week", 7);
-    append_time_transform(&mut request.processors_features, "hour", 24);
+    // ============================================================
+    // This section hardcodes some features and targets, to take
+    // them out of the optimization - they're effectivly constants.
+    // ============================================================
+    //
+    // Add features that should _always_ be present
+    append_time_transform(&mut request.train_config.features, "month", 12);
+    append_time_transform(&mut request.train_config.features, "day_of_week", 7);
+    append_time_transform(&mut request.train_config.features, "hour", 24);
 
-    request.processors_targets.push(
+    // Add targets that should _always_ be present
+    request.train_config.targets.push(
         Extract::new("TEMP").with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
     );
+    // ============================================================
 
     type Backend = burn::backend::Autodiff<burn::backend::NdArray>;
     let device = burn::backend::ndarray::NdArrayDevice::default();
 
     let model = FeedForward::<Backend>::new(
         &device,
-        request.processors_features.len(),
+        request.train_config.features.len(),
         request.train_config.hidden_size,
-        request.processors_targets.len(),
+        request.train_config.targets.len(),
         request.train_config.sequence_length,
     );
 
-    let dataset = ingest(request.processors_features, request.processors_targets).await?;
+    let dataset = ingest(
+        &request.train_config.features,
+        &request.train_config.targets,
+    )
+    .await?;
 
     let (sequences_training, sequences_validation) = dataset.split(0.8)?;
 
@@ -97,8 +90,8 @@ async fn run() -> anyhow::Result<()> {
         request.batch_size,
         request.learning_rate,
         model,
-        None,
-        None,
+        request.model_save_path,
+        Some(request.train_config),
     );
 
     tracing::info!(

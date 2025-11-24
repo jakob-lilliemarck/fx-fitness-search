@@ -85,6 +85,12 @@ impl Csv {
         let mut row = Vec::with_capacity(t.len());
         let mut has_none = false;
         for t in t.iter_mut() {
+            // For Noop features (disabled features), output 0.0 to maintain fixed vector size
+            if t.source == "Noop" {
+                row.push(0.0);
+                continue;
+            }
+
             let input = r.get(&t.source).map(Clone::clone);
 
             let mut output = t.interpolation.interpolate(input).map_err(|e| {

@@ -3,8 +3,8 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn main() -> anyhow::Result<()> {
-    // Read the example JSON request
-    let request_json = fs::read_to_string("examples/beijing_training_request.json")?;
+    // Read the example JSON request (using new Extract format)
+    let request_json = fs::read_to_string("examples/beijing_training_request_new.json")?;
 
     println!("Invoking Beijing training binary with request:");
     println!("{}", request_json);
