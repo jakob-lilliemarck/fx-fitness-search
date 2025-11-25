@@ -138,7 +138,12 @@ impl Genotype for Ema {
             16 => 3,
             32 => 4,
             64 => 5,
-            _ => return Err(Error::Encode(format!("Unexpected Ema window: {}", phenotype.window))),
+            _ => {
+                return Err(Error::Encode(format!(
+                    "Unexpected Ema window: {}",
+                    phenotype.window
+                )));
+            }
         };
 
         Ok(vec![gene])
@@ -274,8 +279,7 @@ impl Genotype for Interpolation {
 }
 
 pub struct Toggle<T: Genotype> {
-    on: bool,
-    source: T,
+    _source: T,
 }
 
 impl<T: Genotype> Genotype for Toggle<T> {
@@ -421,9 +425,9 @@ impl Genotype for Node {
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let mut bounds = Vec::with_capacity(3);
-        bounds.push(GeneBounds::integer(0, 1, 2)?);     // enabled: 0-1
-        bounds.extend(NodeType::morphology()?);        // type: 0-3
-        bounds.push(GeneBounds::integer(0, 5, 6)?);    // variant: 0-5
+        bounds.push(GeneBounds::integer(0, 1, 2)?); // enabled: 0-1
+        bounds.extend(NodeType::morphology()?); // type: 0-3
+        bounds.push(GeneBounds::integer(0, 5, 6)?); // variant: 0-5
         Ok(bounds)
     }
 
@@ -454,7 +458,10 @@ impl Genotype for Node {
 
     fn decode(genes: &[i64]) -> Result<Self::Phenotype, Error> {
         if genes.len() != 3 {
-            return Err(Error::Decode(format!("Expected 3 genes for Node, got {}", genes.len())));
+            return Err(Error::Decode(format!(
+                "Expected 3 genes for Node, got {}",
+                genes.len()
+            )));
         }
 
         // If disabled (genes[0] == 0), return error—caller won't add to Vec
@@ -478,7 +485,7 @@ impl Genotype for Extract {
 
     fn morphology() -> Result<Vec<GeneBounds>, Error> {
         let mut bounds = Vec::new();
-        bounds.extend(Optimizable::morphology()?);  // source: 1 gene
+        bounds.extend(Optimizable::morphology()?); // source: 1 gene
         bounds.extend(Interpolation::morphology()?); // interpolation: 1 gene
         // Layer 1: 3 genes (enabled, type, variant)
         bounds.extend(Node::morphology()?);

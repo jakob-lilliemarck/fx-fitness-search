@@ -21,7 +21,17 @@
         "nodes": [{ "ZScore": { "window": 16 } }]
       }
     ],
-    "targets": []
+    "targets": [
+      {
+        "source": "TEMP",
+        "interpolation": {
+          "Linear": {
+            "window_size": 1
+          }
+        },
+        "nodes": []
+      }
+    ]
   },
   "epochs": 2,
   "batch_size": 32,

@@ -2,7 +2,16 @@ use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+use tracing::Level;
+
 fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .pretty()
+        .with_thread_ids(true)
+        .with_max_level(Level::INFO)
+        .init();
+
     // Read the example JSON request (using new Extract format)
     let request_json = fs::read_to_string("examples/beijing_training_request_new.json")?;
 
@@ -19,9 +28,10 @@ fn main() -> anyhow::Result<()> {
 
     // Send the request JSON via stdin
     {
-        let mut stdin = child.stdin.take().ok_or_else(|| {
-            anyhow::anyhow!("Failed to open stdin")
-        })?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to open stdin"))?;
         stdin.write_all(request_json.as_bytes())?;
     }
 

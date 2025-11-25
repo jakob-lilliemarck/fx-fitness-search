@@ -1,14 +1,26 @@
 use super::phenotype::BeijingPhenotype;
-use super::protocol::{Request, Response};
+use super::protocol::{Request, RequestVariables, Response};
+use crate::core::ingestion::Extract;
+use crate::core::interpolation::{Interpolation, LinearInterpolator};
+use crate::core::preprocessor::{Cos, Node, Sin};
 use crate::core::train_config::TrainConfig;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};
-use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use uuid::Uuid as GuidUuid;
 
+#[derive(Debug, thiserror::Error)]
+pub enum EvaluationError {
+    #[error("Missing request data")]
+    MissingData,
+    #[error("Worker subprocess failed: {0}")]
+    WorkerFailed(String),
+}
+
+/// The evaluator, registered to the GA evaluator registry
+/// This is a shared runtime configurable struct.
 pub struct BeijingEvaluator {
     model_save_path: Option<String>,
 }
@@ -21,23 +33,9 @@ impl BeijingEvaluator {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RequestVariables {
-    pub prediction_horizon: usize,
-}
-
-impl RequestVariables {
-    pub fn new(prediction_horizon: usize) -> Self {
-        Self { prediction_horizon }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum EvaluationError {
-    #[error("Missing request data")]
-    MissingData,
-    #[error("Worker subprocess failed: {0}")]
-    WorkerFailed(String),
+fn append_time_transform(extracts: &mut Vec<Extract>, key: &str, period: u32) {
+    extracts.push(Extract::new(key).with_node(Node::Sin(Sin::new(period as f32))));
+    extracts.push(Extract::new(key).with_node(Node::Cos(Cos::new(period as f32))));
 }
 
 impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
@@ -50,24 +48,33 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
         let model_save_path = self.model_save_path.clone();
         Box::pin(async move {
-            let req_var: RequestVariables =
-                serde_json::from_value(request.data.clone().ok_or(EvaluationError::MissingData)?)?;
+            // Deserialize RequestVariables from the request.data field.
+            let req_var = serde_json::from_value::<RequestVariables>(
+                request.data.clone().ok_or(EvaluationError::MissingData)?,
+            )?;
 
-            tracing::info!(message = "Request data", req_var = ?req_var);
+            // Feature transforms
+            let mut features = phenotype.features().to_vec();
+            let mut targets = Vec::new();
 
-            // Get feature Extracts directly from phenotype
-            let processors_features = phenotype.features().to_vec();
+            // Append time transforms to features transforms
+            append_time_transform(&mut features, "month", 12);
+            append_time_transform(&mut features, "day_of_week", 7);
+            append_time_transform(&mut features, "hour", 24);
 
-            // Target and time transforms are hardcoded in the binary
-            // Here we just send an empty vec for targets
-            let processors_targets = Vec::new();
+            // Append a single target to predict
+            targets.push(
+                Extract::new("TEMP")
+                    .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+            );
 
+            // Construct the TrainConfig  as expected by sync_train()
             let train_config = TrainConfig::new(
                 phenotype.hidden_size,
                 phenotype.sequence_length,
                 req_var.prediction_horizon,
-                processors_features,
-                processors_targets,
+                features,
+                targets,
             );
 
             // Prepare request for training binary
@@ -80,6 +87,15 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 model_save_path: model_save_path
                     .map(|p| format!("{}/{}", p, genotype_id.to_string())),
             };
+
+            // Store the request json document
+            if let Some(path) = train_request
+                .model_save_path
+                .as_ref()
+                .map(|p| format!("{}.request.json", p))
+            {
+                train_request.save(&path)?;
+            }
 
             tracing::info!(
                 message = "Spawning training binary",
@@ -126,7 +142,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 }
 
                 // Parse response
-                let response: Response = serde_json::from_slice(&output.stdout).map_err(|e| {
+                let response = serde_json::from_slice::<Response>(&output.stdout).map_err(|e| {
                     EvaluationError::WorkerFailed(format!("Failed to parse binary response: {}", e))
                 })?;
 

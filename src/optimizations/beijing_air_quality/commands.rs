@@ -1,5 +1,5 @@
 use super::phenotype::BeijingPhenotype;
-use crate::optimizations::beijing_air_quality::evaluator::RequestVariables;
+use super::protocol::RequestVariables;
 use clap::Subcommand;
 use const_fnv1a_hash::fnv1a_hash_str_32;
 use fx_durable_ga::models::{
