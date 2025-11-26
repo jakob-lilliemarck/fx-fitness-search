@@ -40,8 +40,7 @@ impl<B: Backend> Batcher<B, SequenceDatasetItem, SequenceBatch<B>> for SequenceB
         let feature_dim = items[0].features[0].len();
         let target_dim = items[0].target.len();
 
-        // Pre-allocate with exact capacity - this is the key optimization!
-        // No reallocations = much faster and no memory fragmentation
+        // Pre-allocate with capacity
         let total_seq_elements = batch_size * seq_len * feature_dim;
         let total_target_elements = batch_size * target_dim;
 
@@ -71,59 +70,75 @@ impl<B: Backend> Batcher<B, SequenceDatasetItem, SequenceBatch<B>> for SequenceB
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct MyBatcher<B: Backend> {
-    _phantom: core::marker::PhantomData<B>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use burn::backend::ndarray::NdArray;
 
-impl<B: Backend> MyBatcher<B> {
-    pub fn new() -> Self {
-        Self {
-            _phantom: core::marker::PhantomData,
-        }
+    type B = NdArray;
+
+    #[test]
+    fn test_batcher_shapes() {
+        let batcher = SequenceBatcher::<B>::new();
+        let device = Default::default();
+
+        let items = vec![
+            SequenceDatasetItem {
+                features: vec![vec![1.0, 2.0], vec![3.0, 4.0]],
+                target: vec![5.0, 6.0],
+            },
+            SequenceDatasetItem {
+                features: vec![vec![7.0, 8.0], vec![9.0, 10.0]],
+                target: vec![11.0, 12.0],
+            },
+        ];
+
+        let batch = batcher.batch(items, &device);
+
+        assert_eq!(batch.sequences.dims(), [2, 2, 2]);
+        assert_eq!(batch.targets.dims(), [2, 2]);
     }
-}
 
-impl<B: Backend> Batcher<B, (&[Vec<f32>], &Vec<f32>), SequenceBatch<B>> for MyBatcher<B> {
-    /// Convert a Vec of training items into stacked tensors.
-    ///
-    /// Input: Vec of (sequence, target) pairs
-    /// Output: SequenceBatch with sequences and targets as 3D and 2D tensors respectively
-    fn batch(&self, items: Vec<(&[Vec<f32>], &Vec<f32>)>, device: &B::Device) -> SequenceBatch<B> {
-        let batch_size = items.len();
-        assert!(batch_size > 0, "Cannot create a batch from an empty Vec");
+    #[test]
+    fn test_batcher_data_integrity() {
+        let batcher = SequenceBatcher::<B>::new();
+        let device = Default::default();
 
-        let seq_len = items[0].0.len();
-        let feature_dim = items[0].0[0].len();
-        let target_dim = items[0].1.len();
+        let items = vec![SequenceDatasetItem {
+            features: vec![vec![1.0, 2.0], vec![3.0, 4.0]],
+            target: vec![5.0, 6.0],
+        }];
 
-        // Pre-allocate with exact capacity - this is the key optimization!
-        // No reallocations = much faster and no memory fragmentation
-        let total_seq_elements = batch_size * seq_len * feature_dim;
-        let total_target_elements = batch_size * target_dim;
+        let batch = batcher.batch(items, &device);
 
-        let mut all_sequences = Vec::with_capacity(total_seq_elements);
-        let mut all_targets = Vec::with_capacity(total_target_elements);
+        // Verify shapes
+        assert_eq!(batch.sequences.dims(), [1, 2, 2]);
+        assert_eq!(batch.targets.dims(), [1, 2]);
 
-        // Now extend_from_slice won't cause any reallocations
-        for (features, target) in items.iter() {
-            for timestep in features.iter() {
-                all_sequences.extend_from_slice(timestep);
-            }
-            all_targets.extend_from_slice(target);
-        }
+        // Verify data by cloning to ndarray and checking values
+        let seq_clone = batch.sequences.clone();
+        let tgt_clone = batch.targets.clone();
 
-        // Create tensors directly from the Vec data
-        let sequences = Tensor::<B, 3>::from_data(
-            TensorData::new(all_sequences, [batch_size, seq_len, feature_dim]),
-            device,
+        let expected_sequences = Tensor::<B, 3>::from_data(
+            TensorData::new(vec![1.0, 2.0, 3.0, 4.0], [1, 2, 2]),
+            &device,
         );
+        let expected_targets =
+            Tensor::<B, 2>::from_data(TensorData::new(vec![5.0, 6.0], [1, 2]), &device);
 
-        let targets = Tensor::<B, 2>::from_data(
-            TensorData::new(all_targets, [batch_size, target_dim]),
-            device,
+        // Compare using == operator (works for NdArray backend)
+        assert_eq!(
+            seq_clone.to_data().bytes,
+            expected_sequences.to_data().bytes
         );
+        assert_eq!(tgt_clone.to_data().bytes, expected_targets.to_data().bytes);
+    }
 
-        SequenceBatch { sequences, targets }
+    #[test]
+    #[should_panic(expected = "Cannot create a batch from an empty Vec")]
+    fn test_batcher_empty_panics() {
+        let batcher = SequenceBatcher::<B>::new();
+        let device = Default::default();
+        batcher.batch(vec![], &device);
     }
 }
