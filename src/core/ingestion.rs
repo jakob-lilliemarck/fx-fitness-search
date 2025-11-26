@@ -18,6 +18,8 @@ pub enum Error {
     InterpolationError(Box<dyn std::error::Error + Send + Sync>),
     #[error("ProcessingError: {0}")]
     ProcessingError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("SequenceError: {0}")]
+    SequenceError(#[from] SequenceError),
 }
 
 /// Cast from string value to Option<f32> where None represents missing values
@@ -126,7 +128,6 @@ impl Ingestable for Csv {
 
         let headers: Vec<String> = reader.headers()?.iter().map(|h| h.to_string()).collect();
 
-        let mut count: usize = 0;
         let mut seen_complete = false;
         let mut buf_features = Vec::new();
         let mut buf_targets = Vec::new();
@@ -150,7 +151,6 @@ impl Ingestable for Csv {
                     if !seen_complete {
                         seen_complete = true
                     }
-                    count += 1;
                     buf_features.push(features);
                     buf_targets.push(targets);
                     buf_metadata.push(record)
@@ -162,14 +162,14 @@ impl Ingestable for Csv {
             }
         }
 
-        Ok(Sequence {
-            count,
-            features: buf_features,
-            targets: buf_targets,
-            metadata: buf_metadata,
-        })
+        let sequence = Sequence::new(buf_features, buf_targets, buf_metadata)?;
+        Ok(sequence)
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("Could not create Sequence:")]
+pub struct SequenceError(String);
 
 #[derive(Debug)]
 pub struct Sequence {
@@ -180,6 +180,34 @@ pub struct Sequence {
 }
 
 impl Sequence {
+    pub fn new(
+        features: Vec<Vec<f32>>,
+        targets: Vec<Vec<f32>>,
+        metadata: Vec<HashMap<String, String>>,
+    ) -> Result<Self, SequenceError> {
+        let count = features.len();
+        if targets.len() != count {
+            return Err(SequenceError(format!(
+                "targets length ({}) must match features length ({})",
+                targets.len(),
+                count
+            )));
+        }
+        if metadata.len() != count {
+            return Err(SequenceError(format!(
+                "metadata length ({}) must match features length ({})",
+                metadata.len(),
+                count
+            )));
+        }
+        Ok(Self {
+            count,
+            features,
+            targets,
+            metadata,
+        })
+    }
+
     pub fn get_item(
         &self,
         index: usize,
@@ -199,19 +227,17 @@ impl Sequence {
 
         let split_idx = ((self.count as f32) * factor) as usize;
 
-        let train = Sequence {
-            count: split_idx,
-            features: self.features[..split_idx].to_vec(),
-            targets: self.targets[..split_idx].to_vec(),
-            metadata: self.metadata[..split_idx].to_vec(),
-        };
+        let train = Sequence::new(
+            self.features[..split_idx].to_vec(),
+            self.targets[..split_idx].to_vec(),
+            self.metadata[..split_idx].to_vec(),
+        )?;
 
-        let validation = Sequence {
-            count: self.count - split_idx,
-            features: self.features[split_idx..].to_vec(),
-            targets: self.targets[split_idx..].to_vec(),
-            metadata: self.metadata[split_idx..].to_vec(),
-        };
+        let validation = Sequence::new(
+            self.features[split_idx..].to_vec(),
+            self.targets[split_idx..].to_vec(),
+            self.metadata[split_idx..].to_vec(),
+        )?;
 
         Ok((train, validation))
     }
@@ -505,12 +531,7 @@ mod sequence_tests {
             metadata.push(meta);
         }
 
-        Sequence {
-            count,
-            features,
-            targets,
-            metadata,
-        }
+        Sequence::new(features, targets, metadata).unwrap()
     }
 
     #[test]
@@ -657,31 +678,31 @@ mod many_sequences_tests {
 
     fn create_test_many_sequences() -> ManySequences {
         // Create 3 sequences of different sizes: 3, 2, 4 items
-        let mut sequences = Vec::new();
-
-        // Sequence 1: 3 items
-        sequences.push(Sequence {
-            count: 3,
-            features: vec![vec![0.0], vec![1.0], vec![2.0]],
-            targets: vec![vec![0.0], vec![1.0], vec![2.0]],
-            metadata: vec![HashMap::new(), HashMap::new(), HashMap::new()],
-        });
-
-        // Sequence 2: 2 items
-        sequences.push(Sequence {
-            count: 2,
-            features: vec![vec![10.0], vec![11.0]],
-            targets: vec![vec![10.0], vec![11.0]],
-            metadata: vec![HashMap::new(), HashMap::new()],
-        });
-
-        // Sequence 3: 4 items
-        sequences.push(Sequence {
-            count: 4,
-            features: vec![vec![20.0], vec![21.0], vec![22.0], vec![23.0]],
-            targets: vec![vec![20.0], vec![21.0], vec![22.0], vec![23.0]],
-            metadata: vec![HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new()],
-        });
+        let sequences = vec![
+            Sequence::new(
+                vec![vec![0.0], vec![1.0], vec![2.0]],
+                vec![vec![0.0], vec![1.0], vec![2.0]],
+                vec![HashMap::new(), HashMap::new(), HashMap::new()],
+            )
+            .unwrap(),
+            Sequence::new(
+                vec![vec![10.0], vec![11.0]],
+                vec![vec![10.0], vec![11.0]],
+                vec![HashMap::new(), HashMap::new()],
+            )
+            .unwrap(),
+            Sequence::new(
+                vec![vec![20.0], vec![21.0], vec![22.0], vec![23.0]],
+                vec![vec![20.0], vec![21.0], vec![22.0], vec![23.0]],
+                vec![
+                    HashMap::new(),
+                    HashMap::new(),
+                    HashMap::new(),
+                    HashMap::new(),
+                ],
+            )
+            .unwrap(),
+        ];
 
         ManySequences::new(sequences)
     }
