@@ -2,7 +2,7 @@ use super::phenotype::BeijingPhenotype;
 use super::protocol::{Request, RequestVariables, Response};
 use crate::core::ingestion::Extract;
 use crate::core::interpolation::{Interpolation, LinearInterpolator};
-use crate::core::preprocessor::{Cos, Node, Sin};
+use crate::core::preprocessing::{Cos, Node, Sin};
 use crate::core::train_config::TrainConfig;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};

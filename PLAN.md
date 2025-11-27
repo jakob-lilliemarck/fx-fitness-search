@@ -1,663 +1,281 @@
-# Implementation Plan: Timeseries Training Library
+# Core Module Improvement Plan
 
 ## Overview
+This document tracks ongoing improvements to `./src/core` covering test coverage, code structure, correctness, and readability.
 
-This project is building a library to train neural network models on timeseries data. The architecture separates:
-- **Generic/Core code**: Reusable across all domains (preprocessing, models, training loops)
-- **Domain-specific code**: Data loading, phenotype definitions, evaluators
+**Last Review Date:** 2025-11-27
 
-Each domain will integrate with `fx-durable-ga` for distributed genetic algorithm optimization.
+## Current Structure
 
-### Key Technical Constraints
+```
+src/core/
+├── mod.rs
+├── batcher.rs                ✓ (tested)
+├── dataset.rs                ✓ (tested)
+├── model.rs                  ✓ (tested)
+├── interpolation.rs          ✓ (tested)
+├── train.rs                  ✗ (NO TESTS)
+├── train_config.rs           ✗ (NO TESTS)
+├── inference.rs              ✗ (NO TESTS)
+├── ingestion/
+│   ├── mod.rs                (traits + errors)
+│   ├── extract.rs            (transformation pipeline)
+│   ├── sequence.rs           ✓ (40+ tests)
+│   └── file_csv.rs           ✓ (5 integration tests)
+└── preprocessing/
+    ├── mod.rs                (exports)
+    ├── node.rs               ✓ (composite tests)
+    ├── ema.rs                (no unit tests)
+    ├── cos.rs                (no unit tests)
+    ├── sin.rs                (no unit tests)
+    ├── roc.rs                (no unit tests)
+    ├── std.rs                (no unit tests)
+    └── zscore.rs             (no unit tests)
+```
 
-1. **Data Paths**: All file paths must be relative to project root. Data files live in `src/optimizations/beijing_air_quality/data/` but are referenced as `src/optimizations/beijing_air_quality/data/PRSA_Data_*.csv` from the project root.
+## Assessment
 
-2. **Source Columns**: Only columns with valid f32 conversions can be used as source columns. From the CSV header `No,year,month,day,hour,PM2.5,PM10,SO2,NO2,CO,O3,TEMP,PRES,DEWP,RAIN,wd,WSPM,station`, we exclude:
-   - `No` (u32 row identifier, not a feature)
-   - `year` (not currently used)
-   - `station` (enum Station, no f32 conversion yet)
-   
-   This leaves **15 valid source columns**: `month`, `day`, `hour`, `PM2.5`, `PM10`, `SO2`, `NO2`, `CO`, `O3`, `TEMP`, `PRES`, `DEWP`, `RAIN`, `wd` (WindDirection has f32 conversion via degrees), `WSPM`.
+### ✓ Excellent Structure & Tests
 
-3. **Pipeline Output**: All preprocessing pipelines output exactly one f32 value per feature. Each `Pipeline::process()` call returns `Option<f32>`, never a vector.
+**ingestion/** - Well-refactored with clear concerns:
+* mod.rs defines Cast/Ingestable traits (glue layer)
+* extract.rs: transformation pipeline (reusable)
+* sequence.rs: Sequence + ManySequences with 40+ comprehensive tests
+* file_csv.rs: CSV ingestion with 5 integration tests
 
-4. **Type Safety**: The `train::train()` function returns `f32` for loss, but the GA system expects `f64` for fitness. We cast f32→f64 which is safe and lossless.
+**preprocessing/** - Cleanly split with each transformer isolated:
+* Each transformer (Ema, Cos, Sin, Roc, Std, ZScore) in its own file
+* node.rs contains Node enum + composite tests
+* Tests moved to node.rs (good for integration tests)
+* Issue: Individual transformer files lack unit tests
 
-5. **Dataset Combining**: The `SequenceDataset::from_items(Vec<(Metadata, SequenceDatasetItem)>)` method exists for combining datasets from multiple files (verified in dataset.rs line 397).
+**Other tested modules** - batcher, dataset, model, interpolation all have good test coverage
 
-## Current State
+### ✗ CRITICAL GAPS: Missing Tests
 
-### Working Code
-- ✅ `src/optimizations/beijing_air_quality/` - Complete, functional training pipeline
-  - `commands.rs` - CLI with Train/Export/Infer commands
-  - `train.rs` - Generic training loop
-  - `model.rs` - Generic models (FeedForward, SimpleRnn, SimpleLstm)
-  - `preprocessor.rs` - Generic transforms (ZScore, ROC, Sin, Cos, EMA, Std)
-  - `dataset.rs` - Generic DatasetBuilder and SequenceDataset
-  - `parser.rs` - Beijing-specific CSV parsing
-  - `batcher.rs` - Generic sequence batcher
-  - `train_config.rs` - Config serialization
-  - `infer_dataset.rs`, `inference.rs` - Inference functionality
+**1. train.rs (179 lines)**
+* Single large function (train_sync)
+* Handles: optimizer initialization, epoch loop, batch processing, gradient updates, validation loop, early stopping, model saving
+* No tests whatsoever
+* Complex logic critical to correctness: loss calculation, backward pass, optimizer step, early stopping condition
 
-- ✅ `src/optimizations/feng.rs` - Old approach (spawns external binary)
-- ✅ `src/config.rs` - Service configuration and GA registration
-- ✅ `src/bin/client.rs` - Client CLI for GA operations
-- ✅ `src/bin/server.rs` - Server that runs GA workers
+**2. train_config.rs (45 lines)**
+* Serialization/deserialization (save/load)
+* No tests for round-trip or error conditions
+* Critical for model persistence
 
-### Integration Needed
-The beijing_air_quality code needs to be integrated with fx-durable-ga so it can be invoked programmatically for optimization.
+**3. inference.rs (73 lines)**
+* Model loading and prediction interface
+* No tests for load() or predict() functions
+* Critical user-facing API
 
----
+## Code Quality Issues
 
-## Step 1: Wire Up Beijing Air Quality (Minimal Changes)
+### train.rs - Correctness Concerns
 
-**Goal**: Get beijing_air_quality working with fx-durable-ga without breaking existing code.
+| Issue | Line(s) | Impact | Fix |
+|-------|---------|--------|-----|
+| Hardcoded patience=10 | 47 | Not configurable for different datasets | Extract to parameter or config |
+| Hardcoded weight decay=5e-4 | 33 | Not tunable | Extract to parameter |
+| Hardcoded grad clip=1.0 | 34 | Not tunable | Extract to parameter |
+| No dataset validation | N/A | Could fail silently | Add checks before processing |
+| MSE always used | 79 | Only loss function supported | Make configurable |
 
-### 1.1 Create Phenotype
+**Specific concerns:**
+1. Loss calculation: `(outputs - batch.targets).powf_scalar(2.0).mean()` - assumes MSE always appropriate?
+2. Line 91: `model = optimizer.step(...)` mutates model in place; behavior depends on Burn's optimizer implementation
+3. Early stopping hardcoded to patience=10; not configurable
+4. No validation that datasets have items before processing
+5. No handling if batcher returns empty batch (caught by line 66-68 but still edge case)
 
-**File**: `src/optimizations/beijing_air_quality/phenotype.rs`
+### train_config.rs - Validation Issues
 
-**Purpose**: Define the variable parameters that will be optimized by the genetic algorithm.
+| Issue | Line(s) | Impact | Fix |
+|-------|---------|--------|-----|
+| No field validation | 16-30 | Can create invalid configs | Add validation in `new()` |
+| No range checks | N/A | Zero-sized sequences/hidden layers possible | Add assert/error |
+| dead_code on load() | 38 | Suggests incomplete usage | Remove or verify usage |
 
-**Implementation Strategy**: Mirror `feng::Config` exactly to start.
+**Specific issues:**
+1. No validation on field values (hidden_size, sequence_length could be 0)
+2. save/load use ? operator but don't validate on load
+3. `#[allow(dead_code)]` on load() suggests it might not be used everywhere
 
-**Optimizable Parameters** (31 genes total):
-- **7 features** (28 genes = 7 features × 4 genes each): Each feature has:
-  - Source column gene (1 gene): Stores index (0-14) into the 15 valid f32-convertible columns
-  - Pipeline length gene (1 gene): Stores value (0-2) indicating how many transforms to apply
-  - Transform 1 gene (1 gene): Stores index (0-11) selecting one of 12 transform variants
-  - Transform 2 gene (1 gene): Stores index (0-11) selecting one of 12 transform variants
-- **3 hyperparameters** (3 genes = 3 individual genes):
-  - Hidden size gene (1 gene): Stores index (0-5) mapping to [4, 8, 16, 32, 64, 128]
-  - Learning rate gene (1 gene): Stores index (0-2) mapping to [1e-4, 5e-4, 1e-3]
-  - Sequence length gene (1 gene): Stores index (0-9) mapping to [10, 20, 30, ..., 100]
+### inference.rs - Quality Issues
 
-**Note**: Each hyperparameter uses ONE gene that stores an index. During decode, the index maps to the actual value (e.g., hidden_size gene=2 → actual hidden_size=16).
+1. Line 52: Placeholder target vec filled with zeros; what if model expects different target layout?
+2. Line 25: Hardcoded config path format `"{}.config.json"`; should this be configurable?
+3. Line 26: Error message leaks internal path details
 
-**Fixed Parameters** (not optimized):
-- Target: Always TEMP (user specifies target)
-- Model architecture: FeedForward (hardcoded for now)
-- Batch size: 100
-- Epochs: 25
-- Prediction horizon: 1
-- Time features: Always include hour_sin, hour_cos, month_sin, month_cos
+### preprocessing/ - Minor Issue
 
-**Contents**:
-- Struct with same structure as `feng::Config`:
-  ```rust
-  pub struct BeijingPhenotype {
-      #[serde(skip)]
-      features: Vec<Feature>,  // The optimized features with pipelines
-      pub hidden_size: usize,
-      pub learning_rate: f64,
-      pub sequence_length: usize,
-  }
-  ```
-- Internal `Transform` enum (12 hardcoded variants mapping genes to specific transforms):
-  - ZScore10, ZScore24, ZScore48, ZScore96
-  - Roc1, Roc4, Roc8, Roc12
-  - Std10, Std24, Std48, Std96
-- Internal `Feature` struct:
-  ```rust
-  struct Feature {
-      source: String,        // e.g., "TEMP", "PRES"
-      transforms: Vec<Transform>,  // Pipeline of transforms to apply
-  }
-  ```
-- **Transform methods**:
-  - `from_gene(i64) -> Option<Transform>` - decode gene to variant
-  - `to_gene(self) -> i64` - encode variant to gene
-  - `to_node(&self) -> preprocessor::Node` - **NEW**: convert to beijing preprocessor node
-    ```rust
-    fn to_node(&self) -> super::preprocessor::Node {
-        match self {
-            Self::ZScore10 => Node::ZScore(ZScore::new(10)),
-            Self::Roc1 => Node::Roc(Roc::new(1)),
-            Self::Std24 => Node::Std(Std::new(24)),
-            // ... etc for all 12 variants
-        }
-    }
-    ```
-- **Feature methods**:
-  - `to_pipeline(&self) -> preprocessor::Pipeline` - convert transforms to Pipeline:
-    ```rust
-    fn to_pipeline(&self) -> Pipeline {
-        let nodes = self.transforms.iter()
-            .map(|t| t.to_node())
-            .collect();
-        Pipeline::new(nodes)
-    }
-    ```
-- Implement `fx_durable_ga::models::Encodeable` trait
-  - `NAME`: "beijing_air_quality_feature_engineering"
-  - Define constants for gene bounds (at module level for clarity):
-    ```rust
-    const FEATURE_COUNT: usize = 7;
-    const SOURCE_COLUMN_COUNT: usize = 15;  // Length of SOURCE_COLUMNS
-    const MAX_PIPELINE_LENGTH: usize = 2;   // Max transforms per feature
-    const TRANSFORM_COUNT: usize = 12;      // Number of Transform enum variants
+* Individual transformer files (ema.rs, cos.rs, etc.) have NO unit tests
+* Only node.rs has composite tests
+* Hard to test individual transformers in isolation without going through Node enum
+
+## Readability & Organization
+
+**Positive:**
+* Module names are clear (preprocessing, ingestion, train, inference)
+* Dependencies are explicit and minimal
+* ingestion/sequence.rs tests are well-documented with behavior comments
+* preprocessing/ structure makes it easy to add new transformers
+
+**Negative:**
+* train.rs function is dense (179 lines); difficult to follow all phases
+* preprocessing transformer files have no tests, only composite tests in node.rs
+* train.rs has hardcoded hyperparameters (patience=10, weight_decay=5e-4, grad_clip=1.0)
+
+## Recommendations (Priority Order)
+
+### Priority 1 - Add Critical Tests
+**Effort:** HIGH | **Impact:** HIGH | **Urgency:** IMMEDIATE
+
+Target completion: Before next integration/deployment
+
+- [ ] **train_config.rs** (estimated: 1-2 hours)
+  - Save/load round-trip test
+  - Field validation tests
+  - Error condition tests
+  
+- [ ] **inference.rs** (estimated: 2-3 hours)
+  - load() with valid paths
+  - load() error handling
+  - predict() basic functionality
+  - Tensor conversion correctness
+  
+- [ ] **train.rs** (estimated: 4-6 hours)
+  - Requires Burn backend mocking or NdArray backend
+  - Single epoch training
+  - Early stopping logic
+  - Loss calculation
+  - Model saving
+
+### Priority 2 - Correctness Fixes
+**Effort:** MEDIUM | **Impact:** HIGH | **Urgency:** HIGH
+
+- [ ] **train.rs** - Extract hardcoded hyperparameters (patience, weight_decay, grad_clip)
+  - Option A: Add to TrainConfig struct
+  - Option B: Add to train_sync function signature
+  - Decision: Recommend Option A for persistence
+
+- [ ] **train.rs** - Add dataset validation
+  - Check training dataset not empty before processing
+  - Check validation dataset not empty before processing
+  - Return error if validation datasets are empty
+
+- [ ] **train_config.rs** - Add field validation
+  - hidden_size > 0
+  - sequence_length > 0
+  - prediction_horizon >= 0
+
+- [ ] **preprocessing/** - Add unit tests to individual transformer files
+  - Each transformer file should have its own test module
+  - Test normal cases and edge cases (zero values, extreme values)
+
+### Priority 3 - Readability Improvements
+**Effort:** MEDIUM | **Impact:** MEDIUM | **Urgency:** MEDIUM
+
+- [ ] **train.rs** - Extract helper functions for readability
+  - `run_training_epoch()` → returns (total_loss, num_batches)
+  - `run_validation_epoch()` → returns (total_loss, num_batches)
+  - `check_early_stopping()` → returns bool
+  - `maybe_save_model()` → returns Result<()>
+
+- [ ] **preprocessing/** - Document test structure
+  - Add module-level comment explaining why tests are in node.rs
+  - Add individual unit tests to each transformer file
+
+### Priority 4 - Architecture Improvements
+**Effort:** HIGH | **Impact:** MEDIUM | **Urgency:** LOW
+
+Consider for future improvements:
+
+- [ ] Extract EarlyStoppingTracker into separate module
+  - Encapsulate patience, best_loss, epochs_without_improvement
+  - Makes early stopping testable in isolation
+
+- [ ] Make loss function configurable
+  - Currently hardcoded to MSE
+  - Create LossFunction trait?
+
+- [ ] Make optimizer config parameterizable
+  - Currently hardcoded AdamConfig with specific hyperparameters
+  - Allow users to customize
+
+## Testing Strategy
+
+### For train.rs
+Use Burn's NdArray backend for unit tests (CPU-only, deterministic)
+```rust
+#[test]
+fn test_single_epoch_training() {
+    type B = burn::backend::ndarray::NdArray;
+    // Create mock dataset, model, run single epoch
+}
+```
+
+### For train_config.rs
+Simple file I/O tests with temporary files
+```rust
+#[test]
+fn test_save_load_roundtrip() {
+    let config = TrainConfig::new(...);
+    config.save("/tmp/test_config.json").unwrap();
+    let loaded = TrainConfig::load("/tmp/test_config.json").unwrap();
+    assert_eq!(config, loaded); // May need PartialEq impl
+}
+```
+
+### For inference.rs
+Mock or use real model files from test fixtures
+```rust
+#[test]
+fn test_inference_predict() {
+    // Load test model + config
+    // Call predict with dummy sequence
+    // Verify output dimensions
+}
+```
+
+### For preprocessing transformers
+Unit tests in each file:
+```rust
+// In ema.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
     
-    const HIDDEN_SIZE_OPTIONS: &[usize] = &[4, 8, 16, 32, 64, 128];
-    const LEARNING_RATE_OPTIONS: &[f64] = &[1e-4, 5e-4, 1e-3];
-    const SEQUENCE_LENGTH_OPTIONS: &[usize] = &[10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-    ```
-  - `morphology()`: Define gene bounds using named constants
-    ```rust
-    fn morphology() -> Vec<GeneBounds> {
-        let mut bounds = Vec::new();
-        
-        // 7 features, each with 4 genes
-        for _ in 0..FEATURE_COUNT {
-            // Source column index (0 to SOURCE_COLUMN_COUNT-1)
-            bounds.push(GeneBounds::integer(0, SOURCE_COLUMN_COUNT as i64 - 1, SOURCE_COLUMN_COUNT as i64).unwrap());
-            
-            // Pipeline length (0, 1, or 2 transforms)
-            bounds.push(GeneBounds::integer(0, MAX_PIPELINE_LENGTH as i64, MAX_PIPELINE_LENGTH as i64 + 1).unwrap());
-            
-            // Transform 1 index (0 to TRANSFORM_COUNT-1)
-            bounds.push(GeneBounds::integer(0, TRANSFORM_COUNT as i64 - 1, TRANSFORM_COUNT as i64).unwrap());
-            
-            // Transform 2 index (0 to TRANSFORM_COUNT-1)
-            bounds.push(GeneBounds::integer(0, TRANSFORM_COUNT as i64 - 1, TRANSFORM_COUNT as i64).unwrap());
-        }
-        
-        // Hyperparameters - each stores an index into the options array
-        bounds.push(GeneBounds::integer(0, HIDDEN_SIZE_OPTIONS.len() as i64 - 1, HIDDEN_SIZE_OPTIONS.len() as i64).unwrap());
-        bounds.push(GeneBounds::integer(0, LEARNING_RATE_OPTIONS.len() as i64 - 1, LEARNING_RATE_OPTIONS.len() as i64).unwrap());
-        bounds.push(GeneBounds::integer(0, SEQUENCE_LENGTH_OPTIONS.len() as i64 - 1, SEQUENCE_LENGTH_OPTIONS.len() as i64).unwrap());
-        
-        bounds
-    }
-    ```
-  - `encode()`: Phenotype → genes (use constants for indexing, e.g., `HIDDEN_SIZE_OPTIONS.iter().position(...)`)
-  - `decode()`: genes → Phenotype (use constants for lookups, e.g., `HIDDEN_SIZE_OPTIONS[gene as usize]`)
-- Import `SOURCE_COLUMNS` from ingestion module: `use super::ingestion::SOURCE_COLUMNS;`
-- Note: Each gene for source column (0-14) maps to the 15 f32-convertible columns defined in SOURCE_COLUMNS
-
-### 1.2 Create Evaluator
-
-**File**: `src/optimizations/beijing_air_quality/evaluator.rs`
-
-**Purpose**: Evaluate a phenotype by training a model and returning fitness score.
-
-**Key difference from feng**: Instead of spawning external binary, call training code **directly** within the same process.
-
-**Implementation**:
-- Unit struct implementing `fx_durable_ga::models::Evaluator<Phenotype>`
-- `fitness()` method signature (async, returns BoxFuture):
-  ```rust
-  fn fitness<'a>(
-      &self,
-      genotype_id: Uuid,
-      phenotype: BeijingPhenotype,
-      _terminated: &'a Box<dyn Terminated>,
-  ) -> futures::future::BoxFuture<'a, Result<f64, anyhow::Error>>
-  ```
-
-**Implementation steps**:
-1. Create Backend and device inside fitness:
-   ```rust
-   type Backend = Autodiff<NdArray>;
-   let device = NdArrayDevice::default();
-   ```
-
-2. Convert phenotype to feature/target definitions:
-   - Build time features (always included):
-     ```rust
-     let time_features = vec![
-         ("hour_sin".to_string(), "hour".to_string(), Pipeline::new(vec![Node::Sin(Sin::new(24.0))])),
-         ("hour_cos".to_string(), "hour".to_string(), Pipeline::new(vec![Node::Cos(Cos::new(24.0))])),
-         ("month_sin".to_string(), "month".to_string(), Pipeline::new(vec![Node::Sin(Sin::new(12.0))])),
-         ("month_cos".to_string(), "month".to_string(), Pipeline::new(vec![Node::Cos(Cos::new(12.0))])),
-     ];
-     ```
-   - Convert phenotype features to feature definitions:
-     ```rust
-     let mut features = time_features;
-     for (i, feat) in phenotype.features.iter().enumerate() {
-         let name = format!("feat_{}", i);
-         let pipeline = feat.to_pipeline();  // Uses Transform::to_node()
-         features.push((name, feat.source.clone(), pipeline));
-     }
-     ```
-   - Target definition:
-     ```rust
-     let targets = vec![(
-         "target_temp".to_string(),
-         "TEMP".to_string(),
-         Pipeline::new(vec![])  // No preprocessing on target
-     )];
-     ```
-
-3. Load data from all stations using `super::ingestion::PATHS` constant:
-   - For each path, call `dataset::build_dataset_from_file(path, &features, &targets)`
-   - Split 80/20 train/validation using `.build(sequence_length, 1, Some(0.8))`
-     - `sequence_length` from phenotype
-     - `prediction_horizon = 1` (hardcoded - predict 1 timestep ahead)
-     - `0.8` split ratio (80% train, 20% validation)
-   - Combine all stations into unified datasets using `SequenceDataset::from_items(Vec<(Metadata, SequenceDatasetItem)>)` (method exists in dataset.rs line 397)
-
-4. Create FeedForward model:
-   - input_size = 11 (4 time features + 7 optimized features)
-   - hidden_size from phenotype
-   - output_size = 1 (single target)
-   - sequence_length from phenotype
-   - Note: Each feature pipeline outputs exactly one f32 value (verified in preprocessor.rs - all `process()` methods return `Option<f32>`)
-
-5. Train using `train::train()`:
-   - batch_size: 100 (fixed)
-   - epochs: 25 (fixed)
-   - learning_rate from phenotype
-   - model_save_path: None (don't save during GA optimization)
-   - train_config: None (don't save config during GA)
-
-6. Return validation loss:
-   ```rust
-   // train() returns (model, f32)
-   let (_model, best_valid_loss) = train::train(...);
-   Ok(best_valid_loss as f64)  // Cast f32 to f64 - safe and lossless conversion
-   ```
-
-**Notes**:
-- Lower validation loss = better fitness (minimize)
-- Use `Box::pin(async move { ... })` to wrap implementation
-- Import PATHS from `super::ingestion::PATHS`
-- The key is converting phenotype's Transform enum → preprocessor::Node → Pipeline
-
-### 1.3 Create Ingestion Module
-
-**File**: `src/optimizations/beijing_air_quality/ingestion.rs`
-
-**Purpose**: Centralize domain-specific data ingestion constants and logic for Beijing air quality domain.
-
-**Contents**:
-```rust
-// Valid source columns from Beijing air quality CSV files
-// These are columns that can be converted to f32 for preprocessing
-// CSV header: No,year,month,day,hour,PM2.5,PM10,SO2,NO2,CO,O3,TEMP,PRES,DEWP,RAIN,wd,WSPM,station
-// Excluded: No (u32 identifier), year (not used), station (no f32 conversion)
-// Included: wd (WindDirection converts to f32 degrees)
-pub const SOURCE_COLUMNS: &[&str] = &[
-    "month", "day", "hour", "PM2.5", "PM10", "SO2", "NO2", "CO", "O3", "TEMP", "PRES", "DEWP",
-    "RAIN", "wd", "WSPM",
-]; // 15 columns total (indices 0-14)
-
-// CSV file paths for Beijing air quality data
-// These are relative to the project root
-pub const PATHS: &[&str] = &[
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Aotizhongxin_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Changping_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Dingling_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Dongsi_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Guanyuan_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Gucheng_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Huairou_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Nongzhanguan_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Shunyi_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Tiantan_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanliu_20130301-20170228.csv",
-    "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanshouxigong_20130301-20170228.csv",
-];
-
-pub const WANSHOUXIGONG_PATH: &str = "src/optimizations/beijing_air_quality/data/PRSA_Data_Wanshouxigong_20130301-20170228.csv";
+    #[test]
+    fn test_ema_warmup() { }
+}
 ```
 
-**Note**: This module contains domain-specific ingestion logic for Beijing air quality. Other domains will have their own ingestion modules with their own SOURCE_COLUMNS and file paths.
+## Notes & Decisions
 
-**Important**: SOURCE_COLUMNS must only include columns that have valid f32 conversions. The current list excludes `No` (u32), `year` (unused), and `station` (enum without f32 conversion).
+- **Sequence + ManySequences kept together:** Good decision—they're tightly coupled
+- **Cast trait in ingestion/mod.rs:** Appropriate boundary definition
+- **preprocessing/ split:** Each transformer isolated, good for extensibility
+- **Tests in preprocessing/node.rs:** Currently only composite tests; need individual unit tests
 
-**Future**: CSV parsing logic from parser.rs could eventually move here.
+## Tracking
 
-### 1.4 Update Module Exports
-
-**File**: `src/optimizations/beijing_air_quality/mod.rs`
-
-Add:
-```rust
-pub mod ingestion;
-pub mod phenotype;
-pub mod evaluator;
-
-pub use phenotype::BeijingPhenotype;
-pub use evaluator::BeijingEvaluator;
-```
-
-### 1.5 Register with GA Service
-
-**File**: `src/config.rs`
-
-In the `App::new()` method, register the Beijing evaluator:
-
-```rust
-let svc = Arc::new(
-    fx_durable_ga::bootstrap(pool.clone())
-        .await?
-        .register::<feng::Config, _>(FengEvaluator)
-        .register::<beijing_air_quality::BeijingPhenotype, _>(beijing_air_quality::BeijingEvaluator)
-        .await?
-        .build(),
-);
-```
-
-### 1.6 Restructure Commands Module
-
-**File**: `src/optimizations/beijing_air_quality/commands.rs`
-
-**Goal**: Simplify to focus on "RequestOptimization" command for this domain.
-
-**Changes**:
-
-1. **Simplify the enum** - keep only optimization request:
-   ```rust
-   #[derive(Debug, Subcommand)]
-   pub enum BeijingCommand {
-       /// Request a genetic algorithm optimization for Beijing air quality prediction
-       RequestOptimization {
-           // Note: type_name is NOT a parameter - it's hardcoded to BeijingPhenotype::NAME
-           
-           /// Fitness goal: MIN(threshold) or MAX(threshold)
-           #[arg(long, required = true, value_parser = parse_fitness_goal)]
-           fitness_goal: FitnessGoal,
-           
-           /// Schedule: GENERATIONAL(generations, population) or ROLLING(evaluations, population, interval)
-           #[arg(long, required = true, value_parser = parse_schedule)]
-           schedule: Schedule,
-           
-           /// Selector: TOURNAMENT(tournament_size, sample_size) or ROULETTE(sample_size)
-           #[arg(long, required = true, value_parser = parse_selector)]
-           selector: Selector,
-           
-           /// Mutagen: MUTAGEN(temperature, mutation_rate)
-           #[arg(long, required = true, value_parser = parse_mutagen)]
-           mutagen: Mutagen,
-           
-           /// Initial population size using latin hypercube
-           #[arg(long, required = true)]
-           initial_population: u32,
-       }
-   }
-   ```
-
-2. **Remove Train/Export/Infer commands** for now:
-   - These can be added back later in a more fitting shape
-   - Focus: Starting a GA optimization is the main goal
-   - Train command logic is now in the evaluator
-
-3. **Remove `Args` struct and `Parser`** - only export `BeijingCommand` subcommand
-
-4. **Remove `main()` function** - This file used to be a standalone binary with its own `main()` function, but it should now be integrated as a subcommand in `src/bin/client.rs`. The top-level `Args` struct with `#[derive(Parser)]` should also be removed - only the `BeijingCommand` enum with `#[derive(Subcommand)]` should remain.
-
-5. **Add async execute method**:
-   ```rust
-   impl BeijingCommand {
-       pub async fn execute(self, svc: Arc<fx_durable_ga::optimization::Service>) -> anyhow::Result<()> {
-           match self {
-               Self::RequestOptimization {
-                   fitness_goal,
-                   schedule,
-                   selector,
-                   mutagen,
-                   initial_population,
-               } => {
-                   // Hardcode type_name from BeijingPhenotype::NAME
-                   let type_name = BeijingPhenotype::NAME;
-                   let type_hash: i32 = fnv1a_hash_str_32(type_name) as i32;
-                   
-                   svc.new_optimization_request(
-                       type_name,
-                       type_hash,
-                       fitness_goal,
-                       schedule,
-                       selector,
-                       mutagen,
-                       Crossover::single_point(),
-                       Distribution::latin_hypercube(initial_population),
-                   ).await?;
-                   
-                   tracing::info!("Started optimization request for Beijing air quality");
-                   Ok(())
-               }
-           }
-       }
-   }
-   ```
-
-6. **Keep and update helper code**:
-   - Move `PATHS` to `ingestion.rs` (used by evaluator)
-   - **Keep** value parsers needed for RequestOptimization:
-     - `parse_fitness_goal()` (copy from client.rs)
-     - `parse_schedule()` (copy from client.rs)
-     - `parse_selector()` (copy from client.rs)
-     - `parse_mutagen()` (copy from client.rs)
-   - **Add required imports** for parsers and execute:
-     ```rust
-     use fx_durable_ga::models::{FitnessGoal, Schedule, Selector, Mutagen, Crossover, Distribution};
-     use const_fnv1a_hash::fnv1a_hash_str_32;
-     use std::sync::Arc;
-     use super::phenotype::BeijingPhenotype;
-     ```
-   - Remove `parse_feature_pipeline()` (not needed anymore)
-   - Remove `ResultOutput` (was for CLI training output)
-   - Remove `Args`, `Parser` (not a standalone binary)
-   - Remove `main()` function
-   - Remove `PATHS`, `WANSHOUXIGONG_PATH` (moved to ingestion.rs)
-
-**Note**: The RequestOptimization command needs access to the GA service, so we pass it in. The type_name is hardcoded from `BeijingPhenotype::NAME`.
-
-### 1.7 Integrate Beijing Commands into Client CLI
-
-**File**: `src/bin/client.rs`
-
-**Goal**: Add Beijing domain as a subcommand, keep existing commands unchanged.
-
-**Changes**:
-
-1. **Add import**:
-   ```rust
-   use fx_durable_ga_app::optimizations::beijing_air_quality;
-   ```
-
-2. **Add Beijing to Command enum**:
-   ```rust
-   #[derive(Debug, Subcommand)]
-   enum Command {
-       // Existing GA operations (keep unchanged)
-       RequestOptimization { /* ... */ },
-       ListGenotypes { /* ... */ },
-       GetPhenotype { /* ... */ },
-       
-       // Beijing domain-specific operations
-       #[command(subcommand)]
-       Beijing(beijing_air_quality::BeijingCommand),
-   }
-   ```
-
-3. **Handle Beijing commands in main()**:
-   ```rust
-   match args.command {
-       Command::Beijing(cmd) => {
-           cmd.execute(client.get_svc()).await?;
-       }
-       Command::RequestOptimization { /* ... */ } => {
-           // existing logic (unchanged)
-       }
-       // ... other commands (unchanged)
-   }
-   ```
-
-**Notes**:
-- Existing commands remain unchanged and should continue to work
-- Beijing command needs the service, so we pass `client.get_svc()`
-- No changes needed to GetPhenotype for now - can be enhanced later
-
-### 1.8 Verification
-
-Test that:
-1. Server starts without errors
-2. Can request optimization for Beijing domain via client
-3. Workers pick up jobs and train models
-4. Fitness scores are recorded
-5. Can list genotypes and retrieve phenotypes
-
-**Success criteria**: Beijing domain is fully integrated with GA without breaking any existing functionality.
+| Task | Owner | Status | Target Date | Notes |
+|------|-------|--------|-------------|-------|
+| Add train_config tests | TBD | ⏳ TODO | TBD | Quick win—start here |
+| Add inference tests | TBD | ⏳ TODO | TBD | Medium complexity |
+| Add train tests | TBD | ⏳ TODO | TBD | High complexity—Burn mocking needed |
+| Extract train.rs hyperparameters | TBD | ⏳ TODO | TBD | Depends on Priority 1 tests passing |
+| Add preprocessing unit tests | TBD | ⏳ TODO | TBD | After train.rs tests |
+| Refactor train.rs helpers | TBD | ⏳ TODO | TBD | Last priority—readability only |
 
 ---
 
-## Step 2: Extract Core Components (Light Refactoring)
+## Next Steps
 
-**Goal**: Improve code organization by separating generic from domain-specific code.
-
-### 2.1 Create Core Module Structure
-
-**New directory**: `src/core/`
-
-Move generic code (no logic changes, just reorganization):
-- `preprocessor.rs` - Generic transforms (from beijing_air_quality)
-- `model.rs` - Model trait and implementations
-- `train.rs` - Generic training loop
-- `batcher.rs` - Generic sequence batcher
-- `dataset.rs` - Generic dataset builder (may need minor refactoring)
-- `types.rs` - Shared type aliases:
-  ```rust
-  pub type Feature = Vec<f32>;
-  pub type Timestep = Vec<Feature>;
-  pub type Sequence = Vec<Timestep>;
-  ```
-
-**File**: `src/core/mod.rs`
-```rust
-pub mod batcher;
-pub mod dataset;
-pub mod model;
-pub mod preprocessor;
-pub mod train;
-pub mod types;
-```
-
-### 2.2 Update Beijing Imports
-
-Update imports in `src/optimizations/beijing_air_quality/`:
-```rust
-use crate::core::{model, train, dataset, preprocessor, batcher};
-```
-
-### 2.3 Rename for Clarity (Optional)
-
-Consider renaming files in beijing_air_quality:
-- `parser.rs` → `data_source.rs` (more descriptive)
-
-### 2.4 Verification
-
-- All tests still pass
-- No functional changes
-- Code is better organized
-
----
-
-## Step 3: Prepare for Additional Domains
-
-**Goal**: Validate that the architecture supports multiple domains easily.
-
-### 3.1 Document Domain Interface
-
-Each domain module must provide:
-
-1. **Phenotype** - Struct implementing `Encodeable`
-   - Defines optimizable parameters
-   - Gene encoding/decoding logic
-
-2. **Evaluator** - Struct implementing `Evaluator<Phenotype>`
-   - Takes phenotype, returns fitness score
-   - Uses core components for training
-
-3. **Registration function** (optional pattern):
-   ```rust
-   pub fn register(builder: ServiceBuilder) -> ServiceBuilder {
-       builder.register::<MyPhenotype, _>(MyEvaluator)
-   }
-   ```
-
-4. **Commands enum** - Derives `clap::Subcommand`
-   - Domain-specific CLI commands
-   - Train, export, infer, etc.
-
-### 3.2 Update Config Pattern
-
-Make registration more modular:
-```rust
-let mut builder = fx_durable_ga::bootstrap(pool.clone()).await?;
-builder = beijing_air_quality::register(builder).await?;
-builder = other_domain::register(builder).await?;
-let svc = Arc::new(builder.build());
-```
-
----
-
-## Future Considerations
-
-### Data Format Expectations
-
-All domains are expected to work with 3D tensors:
-```
-[
-  [  // Timestep 1
-    [f32, f32, ..], // Feature 1
-    [f32, f32, ..], // Feature 2
-  ],
-  [  // Timestep 2
-    [f32, f32, ..], // Feature 1
-    [f32, f32, ..], // Feature 2
-  ],
-]
-```
-
-### Preprocessing Pipeline
-
-**Generic part** (in core):
-- Transform nodes: ZScore, ROC, Sin, Cos, EMA, Std
-- Pipeline struct for chaining transforms
-- Processing HashMap<String, f32> through pipeline
-
-**Domain-specific part**:
-- Data loading from source (CSV, API, database, etc.)
-- Parsing raw data into HashMap<String, f32>
-- Valid column definitions
-- Feature engineering specific to domain
-
-### Clean Separation
-
-```
-Domain Data Source
-      ↓
-HashMap<String, f32>  ← Domain boundary
-      ↓
-Core Preprocessing Pipeline
-      ↓
-Core Dataset Builder
-      ↓
-Core Training
-      ↓
-Fitness Score
-      ↓
-Domain Evaluator returns to GA
-```
-
----
-
-## Notes
-
-- **Principle**: Preserve working code, refactor incrementally
-- **Testing**: Verify after each step before proceeding
-- **Feng module**: Can be removed after Beijing is working (old approach)
-- **Commands.rs**: Current main() function logic moves into evaluator
-- **Model choice**: Each domain can choose FeedForward/RNN/LSTM
-- **Directory naming**: Could rename `src/optimizations/` to `src/domains/` for clarity
-
----
-
-## Questions to Resolve
-
-1. Should preprocessing transforms support multi-dimensional features, or stay with Vec<f32>?
-2. How to handle domain-specific data sources? Trait-based or just convention?
-3. Should we create a `Domain` trait to formalize the interface?
-4. Better name for `src/optimizations/` directory?
+1. Start with train_config.rs tests (quick wins build momentum)
+2. Move to inference.rs tests
+3. Tackle train.rs with Burn backend mocking strategy
+4. Address correctness fixes in parallel with testing
+5. Follow up with readability improvements

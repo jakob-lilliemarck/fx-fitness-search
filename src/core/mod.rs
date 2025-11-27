@@ -4,6 +4,6 @@ pub mod inference;
 pub mod ingestion;
 pub mod interpolation;
 pub mod model;
-pub mod preprocessor;
+pub mod preprocessing;
 pub mod train;
 pub mod train_config;

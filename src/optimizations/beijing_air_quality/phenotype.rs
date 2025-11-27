@@ -1,6 +1,6 @@
 use crate::core::ingestion::Extract;
 use crate::core::interpolation::{Interpolation, LinearInterpolator};
-use crate::core::preprocessor::{Ema, Node, Roc, Std, ZScore};
+use crate::core::preprocessing::{Ema, Node, Roc, Std, ZScore};
 use crate::optimizations::beijing_air_quality::cast::{Optimizable, OptimizableError};
 use fx_durable_ga::models::{Encodeable, GeneBoundError, GeneBounds};
 
