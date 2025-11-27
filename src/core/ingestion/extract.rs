@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 // Transforms are processed in order
 // Values occupy the position at which point they were tranformed
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Extract {
     pub source: String,
     pub interpolation: Interpolation,

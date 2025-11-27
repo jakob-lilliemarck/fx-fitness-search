@@ -6,7 +6,7 @@ use super::Std;
 use super::ZScore;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Node {
     Roc(Roc),
     Cos(Cos),

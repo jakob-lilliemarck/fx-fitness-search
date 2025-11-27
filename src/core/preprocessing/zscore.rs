@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ZScore {
     pub(crate) window: usize,
     #[serde(skip, default)]

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Std {
     pub window: usize,
     #[serde(skip, default)]

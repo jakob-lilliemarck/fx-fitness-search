@@ -263,7 +263,7 @@ mod tests {
 
 | Task | Owner | Status | Target Date | Notes |
 |------|-------|--------|-------------|-------|
-| Add train_config tests | TBD | ⏳ TODO | TBD | Quick win—start here |
+| Add train_config tests | Jakob | ✅ DONE | 2025-11-27 | 10 comprehensive tests: save/load round-trip, JSON validation, error handling |
 | Add inference tests | TBD | ⏳ TODO | TBD | Medium complexity |
 | Add train tests | TBD | ⏳ TODO | TBD | High complexity—Burn mocking needed |
 | Extract train.rs hyperparameters | TBD | ⏳ TODO | TBD | Depends on Priority 1 tests passing |

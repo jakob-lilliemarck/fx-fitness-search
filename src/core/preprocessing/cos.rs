@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Cos {
     period: f32,
 }

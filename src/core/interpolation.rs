@@ -15,7 +15,7 @@ impl From<Error> for ingestion::Error {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Interpolation {
     Error,
     Linear(LinearInterpolator),
@@ -37,7 +37,7 @@ impl Interpolation {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LinearInterpolator {
     pub window_size: usize,
     #[serde(skip, default)]
