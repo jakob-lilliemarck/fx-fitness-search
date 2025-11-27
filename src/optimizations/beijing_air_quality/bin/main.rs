@@ -110,7 +110,7 @@ async fn train(
         request.learning_rate,
         model,
         request.model_save_path,
-        Some(request.train_config),
+        request.train_config,
     );
 
     tracing::info!("Training complete");

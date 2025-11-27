@@ -10,6 +10,12 @@ pub struct TrainConfig {
     pub prediction_horizon: usize,
     pub features: Vec<Extract>,
     pub targets: Vec<Extract>,
+    /// Weight decay for L2 regularization. None = disabled
+    pub weight_decay: Option<f32>,
+    /// Gradient clipping norm. None = disabled
+    pub grad_clip: Option<f32>,
+    /// Early stopping patience: number of epochs without improvement before stopping. None = disabled
+    pub patience: Option<usize>,
 }
 
 impl TrainConfig {
@@ -26,7 +32,28 @@ impl TrainConfig {
             prediction_horizon,
             features,
             targets,
+            weight_decay: None,
+            grad_clip: None,
+            patience: None,
         }
+    }
+
+    /// Builder method to set weight decay
+    pub fn with_weight_decay(mut self, weight_decay: f32) -> Self {
+        self.weight_decay = Some(weight_decay);
+        self
+    }
+
+    /// Builder method to set gradient clipping
+    pub fn with_grad_clip(mut self, grad_clip: f32) -> Self {
+        self.grad_clip = Some(grad_clip);
+        self
+    }
+
+    /// Builder method to set early stopping patience
+    pub fn with_patience(mut self, patience: usize) -> Self {
+        self.patience = Some(patience);
+        self
     }
 
     pub fn save(&self, path: &str) -> anyhow::Result<()> {

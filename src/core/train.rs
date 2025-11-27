@@ -21,18 +21,23 @@ pub fn train_sync<B, M>(
     learning_rate: f64,
     mut model: M,
     model_save_path: Option<String>,
-    train_config: Option<TrainConfig>,
+    train_config: TrainConfig,
 ) -> (M, f32)
 where
     B: AutodiffBackend,
     M: SequenceModel<B> + AutodiffModule<B>,
     M::InnerModule: SequenceModel<B::InnerBackend>,
 {
-    // Initialize optimizer
-    let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(5e-4)))
-        .with_grad_clipping(Some(GradientClippingConfig::Norm(1.0)))
-        .init();
+    // Initialize optimizer with config values
+    let mut optim = AdamConfig::new();
+
+    if let Some(wd) = train_config.weight_decay {
+        optim = optim.with_weight_decay(Some(WeightDecayConfig::new(wd)));
+    }
+    if let Some(gc) = train_config.grad_clip {
+        optim = optim.with_grad_clipping(Some(GradientClippingConfig::Norm(gc)));
+    }
+    let mut optimizer = optim.init();
 
     // Create batchers
     let batcher_train = SequenceBatcher::<B>::new();
@@ -44,7 +49,6 @@ where
     // Early stopping variables
     let mut best_valid_loss = f32::INFINITY;
     let mut epochs_without_improvement = 0;
-    let patience = 10;
 
     for epoch in 0..epochs {
         // ============ Training Loop ============
@@ -141,13 +145,17 @@ where
             epochs_without_improvement = 0;
         } else {
             epochs_without_improvement += 1;
-            if epochs_without_improvement >= patience {
-                tracing::info!(
-                    epoch = epoch + 1,
-                    best_valid_loss = best_valid_loss,
-                    "Early stopping triggered",
-                );
-                break;
+
+            // Check early stopping if configured
+            if let Some(patience) = train_config.patience {
+                if epochs_without_improvement >= patience {
+                    tracing::info!(
+                        epoch = epoch + 1,
+                        best_valid_loss = best_valid_loss,
+                        "Early stopping triggered",
+                    );
+                    break;
+                }
             }
         }
 
@@ -168,11 +176,11 @@ where
             .save_file(&path, &CompactRecorder::new())
             .expect("Failed to save model");
 
-        // Save config alongside the model if provided
-        if let Some(config) = train_config {
-            let config_path = format!("{}.config.json", path);
-            config.save(&config_path).expect("Failed to save config");
-        }
+        // Save config alongside the model
+        let config_path = format!("{}.config.json", path);
+        train_config
+            .save(&config_path)
+            .expect("Failed to save config");
     }
 
     (model, best_valid_loss)
