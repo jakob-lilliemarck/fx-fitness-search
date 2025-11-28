@@ -1,5 +1,5 @@
 {
-  "genotype_id": "550e8400-e29b-41d4-a716-446655440000",
+  "genotype_id": "00000000-0000-0000-0000-000000000000",
   "train_config": {
     "hidden_size": 16,
     "sequence_length": 24,
@@ -35,9 +35,10 @@
     "weight_decay": 5e-4,
     "grad_clip": 1.0,
     "patience": 10,
-    "validation_start_epoch": 11
+    "validation_start_epoch": 4,
+    "epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.001
   },
-  "epochs": 10,
-  "batch_size": 32,
-  "learning_rate": 0.001
+  "model_save_path": null
 }

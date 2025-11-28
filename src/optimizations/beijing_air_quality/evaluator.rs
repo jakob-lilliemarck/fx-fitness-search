@@ -68,22 +68,22 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                     .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
             );
 
-            // Construct the TrainConfig  as expected by sync_train()
+            // Construct the TrainConfig with training parameters
             let train_config = TrainConfig::new(
                 phenotype.hidden_size,
                 phenotype.sequence_length,
                 req_var.prediction_horizon,
                 features,
                 targets,
+                25,  // epochs
+                100, // batch_size
+                phenotype.learning_rate,
             )?;
 
             // Prepare request for training binary
             let train_request = Request {
                 genotype_id: GuidUuid::from_bytes(*genotype_id.as_bytes()),
-                train_config,
-                epochs: 25,
-                batch_size: 100,
-                learning_rate: phenotype.learning_rate,
+                train_config: serde_json::to_value(&train_config)?,
                 model_save_path: model_save_path
                     .map(|p| format!("{}/{}", p, genotype_id.to_string())),
             };

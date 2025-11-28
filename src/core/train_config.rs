@@ -27,6 +27,12 @@ pub struct TrainConfig {
     pub patience: Option<usize>,
     /// Epoch at which to start validation. None = validate every epoch starting from epoch 0
     pub validation_start_epoch: Option<usize>,
+    /// Number of epochs to train for
+    pub epochs: usize,
+    /// Batch size for training and validation
+    pub batch_size: usize,
+    /// Learning rate for the optimizer
+    pub learning_rate: f64,
 }
 
 impl TrainConfig {
@@ -36,11 +42,17 @@ impl TrainConfig {
         prediction_horizon: usize,
         features: Vec<Extract>,
         targets: Vec<Extract>,
+        epochs: usize,
+        batch_size: usize,
+        learning_rate: f64,
     ) -> Result<Self, Error> {
         Self::validate_sequence_length(&sequence_length)?;
         Self::validate_hidden_size(&hidden_size)?;
         Self::validate_features(&features)?;
         Self::validate_targets(&targets)?;
+        Self::validate_epochs(&epochs)?;
+        Self::validate_batch_size(&batch_size)?;
+        Self::validate_learning_rate(&learning_rate)?;
 
         Ok(Self {
             hidden_size,
@@ -52,6 +64,9 @@ impl TrainConfig {
             grad_clip: None,
             patience: None,
             validation_start_epoch: None,
+            epochs,
+            batch_size,
+            learning_rate,
         })
     }
 
@@ -78,6 +93,7 @@ impl TrainConfig {
 
     /// Builder method to set validation start epoch
     pub fn with_validation_start_epoch(mut self, epoch: usize) -> Result<Self, Error> {
+        Self::validate_validation_start_epoch(&epoch, &self.epochs)?;
         self.validation_start_epoch = Some(epoch);
         Ok(self)
     }
@@ -88,34 +104,16 @@ impl TrainConfig {
         Ok(())
     }
 
+    /// Parse from a JSON string and validate before returning
+    pub fn from_json_str(json: &str) -> Result<Self, Error> {
+        let config: Self = serde_json::from_str(json)?;
+        config.validate()?;
+        Ok(config)
+    }
+
     pub fn load(path: &str) -> Result<Self, Error> {
         let json = fs::read_to_string(path)?;
-        let config: Self = serde_json::from_str(&json)?;
-
-        // Validate required fields
-        Self::validate_sequence_length(&config.sequence_length)?;
-        Self::validate_hidden_size(&config.hidden_size)?;
-        Self::validate_features(&config.features)?;
-        Self::validate_targets(&config.targets)?;
-
-        // Validate optional fields using map
-        config
-            .weight_decay
-            .as_ref()
-            .map(|wd| Self::validate_weight_decay(wd))
-            .transpose()?;
-        config
-            .grad_clip
-            .as_ref()
-            .map(|gc| Self::validate_grad_clipping(gc))
-            .transpose()?;
-        config
-            .patience
-            .as_ref()
-            .map(|p| Self::validate_patience(p))
-            .transpose()?;
-
-        Ok(config)
+        Self::from_json_str(&json)
     }
 
     fn validate_sequence_length(sequence_length: &usize) -> Result<(), Error> {
@@ -176,6 +174,71 @@ impl TrainConfig {
         }
         Ok(())
     }
+
+    fn validate_epochs(epochs: &usize) -> Result<(), Error> {
+        if *epochs < 1 {
+            return Err(Error::Validation(
+                "epochs must be greater than 0".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_batch_size(batch_size: &usize) -> Result<(), Error> {
+        if *batch_size < 1 {
+            return Err(Error::Validation(
+                "batch_size must be greater than 0".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_learning_rate(learning_rate: &f64) -> Result<(), Error> {
+        if *learning_rate <= 0.0 {
+            return Err(Error::Validation(
+                "learning_rate must be greater than 0.0".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_validation_start_epoch(start_epoch: &usize, epochs: &usize) -> Result<(), Error> {
+        if start_epoch >= epochs {
+            return Err(Error::Validation(format!(
+                "validation_start_epoch ({}) must be less than epochs ({})",
+                start_epoch, epochs
+            )));
+        }
+        Ok(())
+    }
+
+    /// Validate all fields of this config (use after deserialization)
+    fn validate(&self) -> Result<(), Error> {
+        // Required fields
+        Self::validate_sequence_length(&self.sequence_length)?;
+        Self::validate_hidden_size(&self.hidden_size)?;
+        Self::validate_features(&self.features)?;
+        Self::validate_targets(&self.targets)?;
+        Self::validate_epochs(&self.epochs)?;
+        Self::validate_batch_size(&self.batch_size)?;
+        Self::validate_learning_rate(&self.learning_rate)?;
+
+        // Optional fields
+        if let Some(wd) = &self.weight_decay {
+            Self::validate_weight_decay(wd)?;
+        }
+        if let Some(gc) = &self.grad_clip {
+            Self::validate_grad_clipping(gc)?;
+        }
+        if let Some(p) = &self.patience {
+            Self::validate_patience(p)?;
+        }
+        if let Some(se) = &self.validation_start_epoch {
+            Self::validate_validation_start_epoch(se, &self.epochs)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -189,6 +252,9 @@ mod tests {
             1,
             vec![Extract::new("feature1"), Extract::new("feature2")],
             vec![Extract::new("target1")],
+            10,    // epochs
+            32,    // batch_size
+            0.001, // learning_rate
         )
         .expect("Failed to create test config")
     }
@@ -214,6 +280,9 @@ mod tests {
             2,
             vec![Extract::new("f1")],
             vec![Extract::new("t1")],
+            10,
+            32,
+            0.001,
         )
         .expect("Failed to create config");
 
@@ -252,6 +321,9 @@ mod tests {
                 Extract::new("pressure"),
             ],
             vec![Extract::new("weather_prediction")],
+            10,
+            32,
+            0.001,
         )
         .expect("Failed to create config");
         let path = create_temp_path();
@@ -267,25 +339,43 @@ mod tests {
 
     #[test]
     fn test_zero_hidden_size_returns_error() {
-        let result = TrainConfig::new(0, 10, 1, vec![Extract::new("f1")], vec![Extract::new("t1")]);
+        let result = TrainConfig::new(
+            0,
+            10,
+            1,
+            vec![Extract::new("f1")],
+            vec![Extract::new("t1")],
+            10,
+            32,
+            0.001,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_zero_sequence_length_returns_error() {
-        let result = TrainConfig::new(32, 0, 1, vec![Extract::new("f1")], vec![Extract::new("t1")]);
+        let result = TrainConfig::new(
+            32,
+            0,
+            1,
+            vec![Extract::new("f1")],
+            vec![Extract::new("t1")],
+            10,
+            32,
+            0.001,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_empty_features_returns_error() {
-        let result = TrainConfig::new(32, 10, 1, vec![], vec![Extract::new("t1")]);
+        let result = TrainConfig::new(32, 10, 1, vec![], vec![Extract::new("t1")], 10, 32, 0.001);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_empty_targets_returns_error() {
-        let result = TrainConfig::new(32, 10, 1, vec![Extract::new("f1")], vec![]);
+        let result = TrainConfig::new(32, 10, 1, vec![Extract::new("f1")], vec![], 10, 32, 0.001);
         assert!(result.is_err());
     }
 

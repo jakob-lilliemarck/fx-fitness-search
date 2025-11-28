@@ -229,9 +229,6 @@ pub fn train_sync<B, M>(
     device: &B::Device,
     dataset_training: &impl Dataset<SequenceDatasetItem>,
     dataset_validation: &impl Dataset<SequenceDatasetItem>,
-    epochs: usize,
-    batch_size: usize,
-    learning_rate: f64,
     mut model: M,
     model_save_path: Option<String>,
     train_config: TrainConfig,
@@ -253,7 +250,7 @@ where
     let mut best_valid_loss = f32::INFINITY;
     let mut epochs_without_improvement = 0;
 
-    for epoch in 0..epochs {
+    for epoch in 0..train_config.epochs {
         // ============ Training Epoch ============
         let (updated_model, avg_train_loss) = run_training_epoch(
             dataset_training,
@@ -261,8 +258,8 @@ where
             device,
             model,
             &mut optimizer,
-            batch_size,
-            learning_rate,
+            train_config.batch_size,
+            train_config.learning_rate,
         );
         model = updated_model;
 
@@ -279,7 +276,7 @@ where
                 &batcher_valid,
                 device,
                 &valid_model,
-                batch_size,
+                train_config.batch_size,
             )
         } else {
             // Skip validation, use infinity so no early stopping yet
@@ -309,7 +306,7 @@ where
 
         tracing::info!(
             epoch = epoch + 1,
-            total_epochs = epochs,
+            total_epochs = train_config.epochs,
             train_loss = avg_train_loss,
             valid_loss = avg_valid_loss,
             best_valid_loss = best_valid_loss,

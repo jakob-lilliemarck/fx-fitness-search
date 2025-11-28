@@ -1,6 +1,7 @@
 use fx_durable_ga_app::core::dataset::ManySequencesAdapter;
 use fx_durable_ga_app::core::ingestion::Extract;
 use fx_durable_ga_app::core::model::{FeedForward, SequenceModel};
+use fx_durable_ga_app::core::train_config::TrainConfig;
 use fx_durable_ga_app::optimizations::beijing_air_quality::{
     ingest,
     protocol::{Request, Response},
@@ -22,17 +23,26 @@ async fn main() {
         // Parse the input json document
         let request = parse()?;
 
+        // Parse and validate TrainConfig from the JSON value in the Request
+        let train_config = TrainConfig::from_json_str(&request.train_config.to_string())?;
+
         // Create datasets
         let (dataset_training, dataset_validation) = prepare(
-            &request.train_config.features,
-            &request.train_config.targets,
-            request.train_config.prediction_horizon,
-            request.train_config.sequence_length,
+            &train_config.features,
+            &train_config.targets,
+            train_config.prediction_horizon,
+            train_config.sequence_length,
         )
         .await?;
 
         // Train the model
-        let response = train(request, &dataset_training, &dataset_validation).await?;
+        let response = train(
+            request,
+            train_config,
+            &dataset_training,
+            &dataset_validation,
+        )
+        .await?;
 
         // Flush response to stdout
         let json = serde_json::to_string(&response)?;
@@ -53,7 +63,7 @@ fn parse() -> anyhow::Result<Request> {
     // Read Request from stdin
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
-    serde_json::from_str(&buffer).map_err(Into::into)
+    Request::from_json_str(&buffer)
 }
 
 #[instrument(level = "info")]
@@ -87,6 +97,7 @@ async fn prepare(
 #[instrument(level = "info", skip(request, training, validation))]
 async fn train(
     request: Request,
+    train_config: TrainConfig,
     training: &ManySequencesAdapter,
     validation: &ManySequencesAdapter,
 ) -> anyhow::Result<Response> {
@@ -95,22 +106,19 @@ async fn train(
 
     let model = FeedForward::<Backend>::new(
         &device,
-        request.train_config.features.len(),
-        request.train_config.hidden_size,
-        request.train_config.targets.len(),
-        request.train_config.sequence_length,
+        train_config.features.len(),
+        train_config.hidden_size,
+        train_config.targets.len(),
+        train_config.sequence_length,
     );
 
     let (_trained_model, best_valid_loss) = fx_durable_ga_app::core::train::train_sync(
         &device,
         training,
         validation,
-        request.epochs,
-        request.batch_size,
-        request.learning_rate,
         model,
         request.model_save_path,
-        request.train_config,
+        train_config,
     );
 
     tracing::info!("Training complete");
