@@ -75,7 +75,7 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 req_var.prediction_horizon,
                 features,
                 targets,
-            );
+            )?;
 
             // Prepare request for training binary
             let train_request = Request {

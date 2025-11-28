@@ -1,3 +1,3 @@
 pub mod config;
-pub mod optimizations;
 pub mod core;
+pub mod optimizations;
