@@ -25,6 +25,8 @@ pub struct TrainConfig {
     pub grad_clip: Option<f32>,
     /// Early stopping patience: number of epochs without improvement before stopping. None = disabled
     pub patience: Option<usize>,
+    /// Epoch at which to start validation. None = validate every epoch starting from epoch 0
+    pub validation_start_epoch: Option<usize>,
 }
 
 impl TrainConfig {
@@ -49,6 +51,7 @@ impl TrainConfig {
             weight_decay: None,
             grad_clip: None,
             patience: None,
+            validation_start_epoch: None,
         })
     }
 
@@ -70,6 +73,12 @@ impl TrainConfig {
     pub fn with_patience(mut self, patience: usize) -> Result<Self, Error> {
         Self::validate_patience(&patience)?;
         self.patience = Some(patience);
+        Ok(self)
+    }
+
+    /// Builder method to set validation start epoch
+    pub fn with_validation_start_epoch(mut self, epoch: usize) -> Result<Self, Error> {
+        self.validation_start_epoch = Some(epoch);
         Ok(self)
     }
 

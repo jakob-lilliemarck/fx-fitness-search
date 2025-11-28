@@ -86,6 +86,145 @@ where
     }
     Ok(())
 }
+
+/// Run a single training batch through forward, backward, and optimizer step.
+/// Returns the loss value for this batch and updated model.
+fn process_training_batch<B, M, O>(
+    model: M,
+    optimizer: &mut O,
+    batch_sequences: Tensor<B, 3>,
+    batch_targets: Tensor<B, 2>,
+    learning_rate: f64,
+) -> (M, f32)
+where
+    B: AutodiffBackend,
+    M: SequenceModel<B> + AutodiffModule<B>,
+    O: Optimizer<M, B>,
+{
+    // Forward pass
+    let outputs = model.forward(batch_sequences);
+
+    // MSE Loss
+    let loss = (outputs - batch_targets).powf_scalar(2.0).mean();
+
+    // Extract scalar BEFORE backward to avoid keeping the loss tensor
+    let loss_value = loss.clone().into_scalar().elem::<f32>();
+
+    // Backward pass - this creates the gradient graph
+    let grads = loss.backward();
+
+    // Convert gradients to params
+    let grads_params = GradientsParams::from_grads(grads, &model);
+
+    // Update parameters - this consumes the gradients
+    let updated_model = optimizer.step(learning_rate, model, grads_params);
+
+    (updated_model, loss_value)
+}
+
+/// Run the complete training epoch over the dataset.
+/// Returns (updated_model, average_training_loss).
+fn run_training_epoch<B, M, O>(
+    dataset: &impl Dataset<SequenceDatasetItem>,
+    batcher: &SequenceBatcher<B>,
+    device: &B::Device,
+    model: M,
+    optimizer: &mut O,
+    batch_size: usize,
+    learning_rate: f64,
+) -> (M, f32)
+where
+    B: AutodiffBackend,
+    M: SequenceModel<B> + AutodiffModule<B>,
+    O: Optimizer<M, B>,
+{
+    let mut current_model = model;
+    let mut total_loss = 0.0;
+    let mut num_batches = 0;
+    let dataset_len = dataset.len();
+
+    // step_by(batch_size) generates starting indices: 0, batch_size, 2*batch_size, ...
+    // This partitions the dataset into non-overlapping groups of items.
+    // Each group becomes one batch for the forward/backward pass.
+    for start_idx in (0..dataset_len).step_by(batch_size) {
+        let end_idx = (start_idx + batch_size).min(dataset_len);
+
+        // Collect batch_size items (or fewer for the last partial batch)
+        // Each item is a single training example: (sequence, target) pair
+        let items: Vec<_> = (start_idx..end_idx)
+            .filter_map(|i| dataset.get(i))
+            .collect();
+
+        if items.is_empty() {
+            continue;
+        }
+
+        // Batcher converts the Vec of items into tensor batch:
+        // - sequences: Tensor<B, 3> of shape [batch_size, seq_len, features]
+        // - targets: Tensor<B, 2> of shape [batch_size, output_size]
+        let batch = batcher.batch(items, device);
+
+        let (updated_model, loss_value) = process_training_batch(
+            current_model,
+            optimizer,
+            batch.sequences,
+            batch.targets,
+            learning_rate,
+        );
+        current_model = updated_model;
+
+        total_loss += loss_value;
+        num_batches += 1;
+    }
+
+    let avg_loss = compute_average_loss(total_loss, num_batches);
+    (current_model, avg_loss)
+}
+
+/// Run the complete validation epoch over the dataset.
+/// Returns the average validation loss for this epoch.
+fn run_validation_epoch<B, M>(
+    dataset: &impl Dataset<SequenceDatasetItem>,
+    batcher: &SequenceBatcher<B>,
+    device: &B::Device,
+    model: &M,
+    batch_size: usize,
+) -> f32
+where
+    B: burn::tensor::backend::Backend,
+    M: SequenceModel<B>,
+{
+    let mut total_loss = 0.0;
+    let mut num_batches = 0;
+    let dataset_len = dataset.len();
+
+    for start_idx in (0..dataset_len).step_by(batch_size) {
+        let end_idx = (start_idx + batch_size).min(dataset_len);
+
+        let items: Vec<_> = (start_idx..end_idx)
+            .filter_map(|i| dataset.get(i))
+            .collect();
+
+        if items.is_empty() {
+            continue;
+        }
+
+        let batch = batcher.batch(items, device);
+
+        // Validation forward pass (no gradients needed)
+        let loss_value = {
+            let outputs = model.forward(batch.sequences);
+            let loss = (outputs - batch.targets).powf_scalar(2.0).mean();
+            loss.into_scalar().elem::<f32>()
+        }; // Tensor dropped here
+
+        total_loss += loss_value;
+        num_batches += 1;
+    }
+
+    compute_average_loss(total_loss, num_batches)
+}
+
 pub fn train_sync<B, M>(
     device: &B::Device,
     dataset_training: &impl Dataset<SequenceDatasetItem>,
@@ -110,111 +249,62 @@ where
     let batcher_train = SequenceBatcher::<B>::new();
     let batcher_valid = SequenceBatcher::<B::InnerBackend>::new();
 
-    let dataset_train_len = dataset_training.len();
-    let dataset_valid_len = dataset_validation.len();
-
     // Early stopping variables
     let mut best_valid_loss = f32::INFINITY;
     let mut epochs_without_improvement = 0;
 
     for epoch in 0..epochs {
-        // ============ Training Loop ============
-        let mut total_train_loss = 0.0;
-        let mut num_train_batches = 0;
+        // ============ Training Epoch ============
+        let (updated_model, avg_train_loss) = run_training_epoch(
+            dataset_training,
+            &batcher_train,
+            device,
+            model,
+            &mut optimizer,
+            batch_size,
+            learning_rate,
+        );
+        model = updated_model;
 
-        // step_by(batch_size) generates starting indices: 0, batch_size, 2*batch_size, ...
-        // This partitions the dataset into non-overlapping groups of items.
-        // Each group becomes one batch for the forward/backward pass.
-        for start_idx in (0..dataset_train_len).step_by(batch_size) {
-            let end_idx = (start_idx + batch_size).min(dataset_train_len);
+        // Determine if validation should run this epoch
+        let should_validate = train_config
+            .validation_start_epoch
+            .map_or(true, |start_epoch| epoch >= start_epoch);
 
-            // Collect batch_size items (or fewer for the last partial batch)
-            // Each item is a single training example: (sequence, target) pair
-            let items: Vec<_> = (start_idx..end_idx)
-                .filter_map(|i| dataset_training.get(i))
-                .collect();
-
-            if items.is_empty() {
-                continue;
-            }
-
-            // Batcher converts the Vec of items into tensor batch:
-            // - sequences: Tensor<B, 3> of shape [batch_size, seq_len, features]
-            // - targets: Tensor<B, 2> of shape [batch_size, output_size]
-            let batch = batcher_train.batch(items, device);
-
-            // Forward pass
-            let outputs = model.forward(batch.sequences);
-
-            // MSE Loss
-            let loss = (outputs - batch.targets).powf_scalar(2.0).mean();
-
-            // Extract scalar BEFORE backward to avoid keeping the loss tensor
-            let loss_value = loss.clone().into_scalar().elem::<f32>();
-
-            // Backward pass - this creates the gradient graph
-            let grads = loss.backward();
-
-            // Convert gradients to params
-            let grads_params = GradientsParams::from_grads(grads, &model);
-
-            // Update parameters - this consumes the gradients
-            model = optimizer.step(learning_rate, model, grads_params);
-
-            total_train_loss += loss_value;
-            num_train_batches += 1;
-        }
-
-        let avg_train_loss = compute_average_loss(total_train_loss, num_train_batches);
-
-        // ============ Validation Loop ============
-        let valid_model = model.valid();
-        let mut total_valid_loss = 0.0;
-        let mut num_valid_batches = 0;
-
-        for start_idx in (0..dataset_valid_len).step_by(batch_size) {
-            let end_idx = (start_idx + batch_size).min(dataset_valid_len);
-
-            let items: Vec<_> = (start_idx..end_idx)
-                .filter_map(|i| dataset_validation.get(i))
-                .collect();
-
-            if items.is_empty() {
-                continue;
-            }
-
-            let batch = batcher_valid.batch(items, device);
-
-            // Validation forward pass (no gradients needed)
-            let loss_value = {
-                let outputs = valid_model.forward(batch.sequences);
-                let loss = (outputs - batch.targets).powf_scalar(2.0).mean();
-                loss.into_scalar().elem::<f32>()
-            }; // Tensor dropped here
-
-            total_valid_loss += loss_value;
-            num_valid_batches += 1;
-        }
-
-        let avg_valid_loss = compute_average_loss(total_valid_loss, num_valid_batches);
+        let avg_valid_loss = if should_validate {
+            // ============ Validation Epoch ============
+            let valid_model = model.valid();
+            run_validation_epoch::<B::InnerBackend, M::InnerModule>(
+                dataset_validation,
+                &batcher_valid,
+                device,
+                &valid_model,
+                batch_size,
+            )
+        } else {
+            // Skip validation, use infinity so no early stopping yet
+            f32::INFINITY
+        };
 
         // ============ Early Stopping Check ============
-        let (should_stop, new_epochs_count, new_best_loss) = update_early_stopping_state(
-            best_valid_loss,
-            avg_valid_loss,
-            epochs_without_improvement,
-            train_config.patience,
-        );
-        best_valid_loss = new_best_loss;
-        epochs_without_improvement = new_epochs_count;
-
-        if should_stop {
-            tracing::info!(
-                epoch = epoch + 1,
-                best_valid_loss = best_valid_loss,
-                "Early stopping triggered",
+        if should_validate {
+            let (should_stop, new_epochs_count, new_best_loss) = update_early_stopping_state(
+                best_valid_loss,
+                avg_valid_loss,
+                epochs_without_improvement,
+                train_config.patience,
             );
-            break;
+            best_valid_loss = new_best_loss;
+            epochs_without_improvement = new_epochs_count;
+
+            if should_stop {
+                tracing::info!(
+                    epoch = epoch + 1,
+                    best_valid_loss = best_valid_loss,
+                    "Early stopping triggered",
+                );
+                break;
+            }
         }
 
         tracing::info!(

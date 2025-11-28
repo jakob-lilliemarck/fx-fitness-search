@@ -31,9 +31,13 @@
         },
         "nodes": []
       }
-    ]
+    ],
+    "weight_decay": 5e-4,
+    "grad_clip": 1.0,
+    "patience": 10,
+    "validation_start_epoch": 11
   },
-  "epochs": 2,
+  "epochs": 10,
   "batch_size": 32,
   "learning_rate": 0.001
 }
