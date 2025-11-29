@@ -27,6 +27,7 @@ pub struct HostId;
 pub struct LeaseSeconds;
 pub struct ShutdownTimeoutSeconds;
 pub struct ModelSavePath;
+pub struct MaxWorkers;
 
 impl Var for DatabaseUrl {
     const NAME: &'static str = "DATABASE_URL";
@@ -118,6 +119,32 @@ impl Var for ModelSavePath {
     }
 }
 
+impl Var for MaxWorkers {
+    const NAME: &str = "MAX_WORKERS";
+    type Type = Option<usize>;
+
+    fn from_env() -> Result<Self::Type, ConfigError> {
+        match std::env::var(Self::NAME) {
+            Ok(val) => {
+                let n = val.parse::<usize>().map_err(|err| ConfigError::Invalid {
+                    key: Self::NAME.to_string(),
+                    value: val.clone(),
+                    message: err.to_string(),
+                })?;
+                if n < 1 {
+                    return Err(ConfigError::Invalid {
+                        key: Self::NAME.to_string(),
+                        value: val,
+                        message: "must be >= 1".to_string(),
+                    });
+                }
+                Ok(Some(n))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub database_url: String,
@@ -146,13 +173,13 @@ impl ServerConfig {
 
         let model_save_path = ModelSavePath::from_env()?;
 
-        // Get the number of physical cores on the current machine.
-        // At the time of writing this I know that my current training with NdArray runs on 2 cores.
-        // As such we divide by two and round down, to get the numbers of worker to run.
-        // Note that this couples the logic of this server to knowledge of the training,
-        // which obviously is less than ideal - however, this is just an experiment.
+        // Determine worker count.
+        // Calculate default as half the physical cores (NdArray ~2 cores/worker).
+        // If MAX_WORKERS env var is set, cap the result to not exceed that limit.
         let physical_cores = num_cpus::get_physical();
-        let workers = physical_cores / 2;
+        let default_workers = physical_cores / 2;
+        let max_workers = MaxWorkers::from_env()?;
+        let workers = max_workers.map_or(default_workers, |max| default_workers.min(max));
 
         tracing::info!(
             message = "Configuration loaded",
