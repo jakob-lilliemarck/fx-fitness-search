@@ -42,11 +42,39 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RequestVariables {
     pub prediction_horizon: usize,
+    pub epochs: usize,
+    pub patience: usize,
+    pub validation_start_epoch: usize,
+    pub batch_size: usize,
 }
 
 impl RequestVariables {
     pub fn new(prediction_horizon: usize) -> Self {
-        Self { prediction_horizon }
+        // Provide sensible defaults; CLI can override
+        Self {
+            prediction_horizon,
+            epochs: 25,
+            patience: 5,
+            validation_start_epoch: 10,
+            batch_size: 100,
+        }
+    }
+
+    /// Create RequestVariables with all parameters explicitly set
+    pub fn with_training_params(
+        prediction_horizon: usize,
+        epochs: usize,
+        patience: usize,
+        validation_start_epoch: usize,
+        batch_size: usize,
+    ) -> Self {
+        Self {
+            prediction_horizon,
+            epochs,
+            patience,
+            validation_start_epoch,
+            batch_size,
+        }
     }
 }
 

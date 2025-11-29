@@ -181,6 +181,22 @@ pub enum BeijingCommand {
         /// Prediction horizon to predict values at
         #[arg(long, required = true)]
         prediction_horizon: usize,
+
+        /// Number of epochs to train for
+        #[arg(long, default_value = "25")]
+        epochs: usize,
+
+        /// Early stopping patience: number of epochs without improvement before stopping
+        #[arg(long, default_value = "5")]
+        patience: usize,
+
+        /// Epoch at which to start validation
+        #[arg(long, default_value = "10")]
+        validation_start_epoch: usize,
+
+        /// Batch size for training and validation
+        #[arg(long, default_value = "100")]
+        batch_size: usize,
     },
 }
 
@@ -197,10 +213,22 @@ impl BeijingCommand {
                 mutagen,
                 initial_population,
                 prediction_horizon,
+                epochs,
+                patience,
+                validation_start_epoch,
+                batch_size,
             } => {
                 // Hardcode type_name from BeijingPhenotype::NAME
                 let type_name = BeijingPhenotype::NAME;
                 let type_hash: i32 = fnv1a_hash_str_32(type_name) as i32;
+
+                let request_vars = RequestVariables::with_training_params(
+                    prediction_horizon,
+                    epochs,
+                    patience,
+                    validation_start_epoch,
+                    batch_size,
+                );
 
                 svc.new_optimization_request(
                     type_name,
@@ -211,7 +239,7 @@ impl BeijingCommand {
                     mutagen,
                     Crossover::single_point(),
                     Distribution::latin_hypercube(initial_population),
-                    Some(RequestVariables::new(prediction_horizon)),
+                    Some(request_vars),
                 )
                 .await?;
 

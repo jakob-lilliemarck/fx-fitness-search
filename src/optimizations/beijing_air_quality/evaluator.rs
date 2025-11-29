@@ -72,17 +72,19 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                     .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
             );
 
-            // Construct the TrainConfig with training parameters
+            // Construct the TrainConfig with training parameters from request
             let train_config = TrainConfig::new(
                 phenotype.hidden_size,
                 phenotype.sequence_length,
                 req_var.prediction_horizon,
                 features,
                 targets,
-                25,  // epochs
-                100, // batch_size
+                req_var.epochs,
+                req_var.batch_size,
                 phenotype.learning_rate,
-            )?;
+            )?
+            .with_patience(req_var.patience)?
+            .with_validation_start_epoch(req_var.validation_start_epoch)?;
 
             // Prepare request for training binary
             let train_request = Request {

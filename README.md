@@ -73,5 +73,15 @@ target/release/client beijing request-optimization \
   --selector 'TOURNAMENT(3, 12)' \
   --mutagen 'MUTAGEN(0.7, 0.4)' \
   --initial-population 50 \
-  --prediction-horizon 1
+  --prediction-horizon 1 \
+  --epochs 20 \
+  --patience 3 \
+  --validation-start-epoch 5 \
+  --batch-size 128
 ```
+
+Optional training hyperparameters (shown above with defaults):
+- `--epochs`: Number of epochs to train for (default: 25)
+- `--patience`: Early stopping patience in epochs (default: 5)
+- `--validation-start-epoch`: Epoch to start validation (default: 10)
+- `--batch-size`: Training batch size (default: 100)
