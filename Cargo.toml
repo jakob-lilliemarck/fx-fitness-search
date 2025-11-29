@@ -37,6 +37,8 @@ csv = "1.3"
 burn = { version = "0.20.0-pre.1", features = ["train", "ndarray"], default-features = false }
 approx = "0.5.1"
 chrono = "0.4.9"
+latlon = "0.1.3"
+geo = "0.31.0"
 
 [[bin]]
 name = "migrate"

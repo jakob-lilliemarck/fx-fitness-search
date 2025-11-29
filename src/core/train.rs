@@ -326,8 +326,8 @@ mod tests {
     use super::*;
     use crate::core::ingestion::Extract;
     use crate::core::model::FeedForward;
-    use burn::backend::ndarray::NdArray;
     use burn::backend::Autodiff as AD;
+    use burn::backend::ndarray::NdArray;
     use burn::data::dataloader::Dataset;
 
     // These tests exercise the pure helpers and add small smoke tests for the
@@ -354,11 +354,15 @@ mod tests {
             let mut features = Vec::with_capacity(seq_len);
             for s in 0..seq_len {
                 let mut ts = Vec::with_capacity(feat);
-                for f in 0..feat { ts.push((i + s + f) as f32); }
+                for f in 0..feat {
+                    ts.push((i + s + f) as f32);
+                }
                 features.push(ts);
             }
             let mut target = Vec::with_capacity(out);
-            for o in 0..out { target.push((i + o) as f32); }
+            for o in 0..out {
+                target.push((i + o) as f32);
+            }
             items.push(SequenceDatasetItem { features, target });
         }
         items
@@ -367,15 +371,16 @@ mod tests {
     // Minimal valid TrainConfig for tests (small epochs/batch for speed)
     fn make_train_config(seq_len: usize, feat: usize, out: usize) -> TrainConfig {
         TrainConfig::new(
-            8,                 // hidden_size
-            seq_len,           // sequence_length
-            1,                 // prediction_horizon
+            8,       // hidden_size
+            seq_len, // sequence_length
+            1,       // prediction_horizon
             vec![Extract::new("f"); feat],
             vec![Extract::new("t"); out],
-            2,                 // epochs (small)
-            2,                 // batch_size
-            1e-3,              // learning_rate
-        ).unwrap()
+            2,    // epochs (small)
+            2,    // batch_size
+            1e-3, // learning_rate
+        )
+        .unwrap()
     }
 
     // compute_average_loss should handle the 0-batch case and basic averaging.
@@ -430,8 +435,10 @@ mod tests {
         let device = <B as Backend>::Device::default();
 
         // Model dims
-        let seq_len = 2; let feat = 3; let out = 1;
-        let mut model = FeedForward::<B>::new(&device, feat, 8, out, seq_len);
+        let seq_len = 2;
+        let feat = 3;
+        let out = 1;
+        let model = FeedForward::<B>::new(&device, feat, 8, out, seq_len);
 
         // Tiny datasets to keep the test fast
         let train_items = make_items(4, seq_len, feat, out);
@@ -442,9 +449,8 @@ mod tests {
         // Separate batchers for autodiff and inner backend
         let mut optimizer = AdamConfig::new().init();
         let batcher_train = SequenceBatcher::<B>::new();
-        let batcher_valid = SequenceBatcher::<
-            <B as burn::tensor::backend::AutodiffBackend>::InnerBackend
-        >::new();
+        let batcher_valid =
+            SequenceBatcher::<<B as burn::tensor::backend::AutodiffBackend>::InnerBackend>::new();
 
         // One training epoch should return a finite average loss and a new model
         let (updated_model, train_loss) = run_training_epoch::<B, _, _>(
@@ -453,8 +459,8 @@ mod tests {
             &device,
             model,
             &mut optimizer,
-            2,       // batch_size
-            1e-3,    // lr
+            2,    // batch_size
+            1e-3, // lr
         );
         assert!(train_loss.is_finite());
 
@@ -462,14 +468,8 @@ mod tests {
         let valid_model = updated_model.valid();
         let valid_loss = run_validation_epoch::<
             <B as burn::tensor::backend::AutodiffBackend>::InnerBackend,
-            _
-        >(
-            &ds_valid,
-            &batcher_valid,
-            &device,
-            &valid_model,
-            2,
-        );
+            _,
+        >(&ds_valid, &batcher_valid, &device, &valid_model, 2);
         assert!(valid_loss.is_finite());
     }
 
@@ -483,13 +483,23 @@ mod tests {
         let config = make_train_config(2, 3, 1);
 
         // Unique temp base path
-        let stamp = format!("{}_{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        let stamp = format!(
+            "{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let base = std::env::temp_dir().join(format!("train_persist_{}", stamp));
         let base_str = base.to_string_lossy().to_string();
 
-        persist_trained_model_and_config_if_requested::<NB, _>(&model, &Some(base_str.clone()), &config)
-            .expect("persist should succeed");
+        persist_trained_model_and_config_if_requested::<NB, _>(
+            &model,
+            &Some(base_str.clone()),
+            &config,
+        )
+        .expect("persist should succeed");
 
         // Model path may be backend-specific; always ensure config is written
         assert!(std::path::Path::new(&(base_str.clone() + ".config.json")).exists());
@@ -505,11 +515,17 @@ mod tests {
     fn test_train_sync_skips_validation_when_start_after_epochs() {
         type B = AD<NdArray>;
         let device = <B as Backend>::Device::default();
-        let seq_len = 2; let feat = 2; let out = 1;
+        let seq_len = 2;
+        let feat = 2;
+        let out = 1;
 
         // Tiny datasets
-        let ds_train = VecDataset { items: make_items(2, seq_len, feat, out) };
-        let ds_valid = VecDataset { items: make_items(1, seq_len, feat, out) };
+        let ds_train = VecDataset {
+            items: make_items(2, seq_len, feat, out),
+        };
+        let ds_valid = VecDataset {
+            items: make_items(1, seq_len, feat, out),
+        };
 
         let model = FeedForward::<B>::new(&device, feat, 6, out, seq_len);
 
@@ -518,14 +534,8 @@ mod tests {
         config.epochs = 2;
         config.validation_start_epoch = Some(5); // never validate
 
-        let (_m, best_valid) = train_sync::<B, _>(
-            &device,
-            &ds_train,
-            &ds_valid,
-            model,
-            None,
-            config,
-        );
+        let (_m, best_valid) =
+            train_sync::<B, _>(&device, &ds_train, &ds_valid, model, None, config);
         assert!(best_valid.is_infinite());
     }
 }

@@ -53,9 +53,13 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                 request.data.clone().ok_or(EvaluationError::MissingData)?,
             )?;
 
-            // Feature transforms
+            // feature and target transforms
             let mut features = phenotype.features().to_vec();
             let mut targets = Vec::new();
+
+            // Add geographic location, without any preprocessing
+            features.push(Extract::new("pos_x"));
+            features.push(Extract::new("pos_y"));
 
             // Append time transforms to features transforms
             append_time_transform(&mut features, "month", 12);
