@@ -59,15 +59,13 @@ fn configure_optimizer_with_training_settings(train_config: &TrainConfig) -> Ada
     optim
 }
 
-/// Persist trained model and config to disk if save path is provided.
-/// Model is saved using CompactRecorder; config is saved as JSON alongside.
-/// If a save path was provided, both model and config must be saved successfully.
-/// Returns Ok(()) if no save was requested, or if both saves succeeded.
-/// Returns Err if save was requested but failed for model or config.
-fn persist_trained_model_and_config_if_requested<B, M>(
+/// Persist trained model to disk if save path is provided.
+/// Model is saved using CompactRecorder.
+/// Returns Ok(()) if no save was requested, or if save succeeded.
+/// Returns Err if save was requested but failed.
+fn persist_trained_model_if_requested<B, M>(
     model: &M,
     model_save_path: &Option<String>,
-    train_config: &TrainConfig,
 ) -> anyhow::Result<()>
 where
     B: burn::tensor::backend::Backend,
@@ -78,11 +76,6 @@ where
             .clone()
             .save_file(path, &CompactRecorder::new())
             .map_err(|e| anyhow::anyhow!("Failed to save model to {}: {}", path, e))?;
-
-        let config_path = format!("{}.config.json", path);
-        train_config
-            .save(&config_path)
-            .map_err(|e| anyhow::anyhow!("Failed to save config to {}: {}", config_path, e))?;
     }
     Ok(())
 }
@@ -314,9 +307,9 @@ where
         );
     }
 
-    // Persist trained model and config if a save path was provided
-    persist_trained_model_and_config_if_requested::<B, M>(&model, &model_save_path, &train_config)
-        .expect("Failed to persist trained model and config");
+    // Persist trained model if a save path was provided
+    persist_trained_model_if_requested::<B, M>(&model, &model_save_path)
+        .expect("Failed to persist trained model");
 
     (model, best_valid_loss)
 }
@@ -473,16 +466,15 @@ mod tests {
         assert!(valid_loss.is_finite());
     }
 
-    // Persist helper should write the sidecar config JSON next to the model.
+    // Persist helper should save the model if a path is provided (no error).
     #[test]
-    fn test_persist_trained_model_and_config_if_requested_creates_files() {
+    fn test_persist_trained_model_if_requested_saves_model() {
         // Use non-autodiff backend for saving
         type NB = NdArray;
         let device = <NB as Backend>::Device::default();
         let model = FeedForward::<NB>::new(&device, 3, 4, 1, 2);
-        let config = make_train_config(2, 3, 1);
 
-        // Unique temp base path
+        // Unique temp path
         let stamp = format!(
             "{}_{}",
             std::process::id(),
@@ -494,19 +486,12 @@ mod tests {
         let base = std::env::temp_dir().join(format!("train_persist_{}", stamp));
         let base_str = base.to_string_lossy().to_string();
 
-        persist_trained_model_and_config_if_requested::<NB, _>(
-            &model,
-            &Some(base_str.clone()),
-            &config,
-        )
-        .expect("persist should succeed");
-
-        // Model path may be backend-specific; always ensure config is written
-        assert!(std::path::Path::new(&(base_str.clone() + ".config.json")).exists());
+        // Should succeed without error; CompactRecorder handles the file format
+        persist_trained_model_if_requested::<NB, _>(&model, &Some(base_str.clone()))
+            .expect("persist should succeed");
 
         // cleanup (best-effort)
-        let _ = std::fs::remove_file(base_str.clone());
-        let _ = std::fs::remove_file(base_str + ".config.json");
+        let _ = std::fs::remove_file(base_str);
     }
 
     // End-to-end check that when validation is disabled by start epoch, the

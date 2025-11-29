@@ -1,13 +1,10 @@
 use crate::core::ingestion::Extract;
 use serde::{Deserialize, Serialize};
-use std::{fs, io};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Validation error: {0}")]
     Validation(String),
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -96,24 +93,6 @@ impl TrainConfig {
         Self::validate_validation_start_epoch(&epoch, &self.epochs)?;
         self.validation_start_epoch = Some(epoch);
         Ok(self)
-    }
-
-    pub fn save(&self, path: &str) -> Result<(), Error> {
-        let json = serde_json::to_string_pretty(self)?;
-        fs::write(path, json)?;
-        Ok(())
-    }
-
-    /// Parse from a JSON string and validate before returning
-    pub fn from_json_str(json: &str) -> Result<Self, Error> {
-        let config: Self = serde_json::from_str(json)?;
-        config.validate()?;
-        Ok(config)
-    }
-
-    pub fn load(path: &str) -> Result<Self, Error> {
-        let json = fs::read_to_string(path)?;
-        Self::from_json_str(&json)
     }
 
     fn validate_sequence_length(sequence_length: &usize) -> Result<(), Error> {
@@ -212,6 +191,13 @@ impl TrainConfig {
         Ok(())
     }
 
+    /// Parse from a JSON string and validate before returning
+    pub fn from_json_str(json: &str) -> Result<Self, Error> {
+        let config: Self = serde_json::from_str(json)?;
+        config.validate()?;
+        Ok(config)
+    }
+
     /// Validate all fields of this config (use after deserialization)
     fn validate(&self) -> Result<(), Error> {
         // Required fields
@@ -259,19 +245,6 @@ mod tests {
         .expect("Failed to create test config")
     }
 
-    fn create_temp_path() -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        format!(
-            "/tmp/train_config_test_{}_{}.json",
-            std::process::id(),
-            timestamp
-        )
-    }
-
     #[test]
     fn test_new_creates_config_with_correct_values() {
         let config = TrainConfig::new(
@@ -291,50 +264,6 @@ mod tests {
         assert_eq!(config.prediction_horizon, 2);
         assert_eq!(config.features.len(), 1);
         assert_eq!(config.targets.len(), 1);
-    }
-
-    #[test]
-    fn test_save_creates_valid_json_file() {
-        let config = create_test_config();
-        let path = create_temp_path();
-
-        config.save(&path).expect("Failed to save config");
-
-        // Verify file exists and can be parsed as valid JSON
-        let contents = fs::read_to_string(&path).expect("Failed to read file");
-        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&contents);
-        assert!(parsed.is_ok(), "File does not contain valid JSON");
-
-        // Cleanup - remove before exiting
-        fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn test_roundtrip_save_load_preserves_all_fields() {
-        let config = TrainConfig::new(
-            128,
-            50,
-            5,
-            vec![
-                Extract::new("temp"),
-                Extract::new("humidity"),
-                Extract::new("pressure"),
-            ],
-            vec![Extract::new("weather_prediction")],
-            10,
-            32,
-            0.001,
-        )
-        .expect("Failed to create config");
-        let path = create_temp_path();
-
-        config.save(&path).expect("Failed to save");
-        let loaded = TrainConfig::load(&path).expect("Failed to load");
-
-        assert_eq!(config, loaded);
-
-        // Cleanup
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
@@ -411,5 +340,39 @@ mod tests {
         assert_eq!(config.weight_decay, Some(1e-3));
         assert_eq!(config.grad_clip, Some(0.5));
         assert_eq!(config.patience, Some(5));
+    }
+
+    #[test]
+    fn test_from_json_str_valid_config() {
+        let config = create_test_config();
+        let json_str = serde_json::to_string(&config).expect("Failed to serialize");
+        let parsed = TrainConfig::from_json_str(&json_str);
+        assert!(parsed.is_ok());
+        let parsed_cfg = parsed.unwrap();
+        assert_eq!(parsed_cfg.hidden_size, config.hidden_size);
+        assert_eq!(parsed_cfg.sequence_length, config.sequence_length);
+    }
+
+    #[test]
+    fn test_from_json_str_invalid_json() {
+        let result = TrainConfig::from_json_str("not valid json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_json_str_with_optional_fields() {
+        let config = create_test_config()
+            .with_weight_decay(1e-3)
+            .and_then(|c| c.with_grad_clip(0.5))
+            .and_then(|c| c.with_patience(5))
+            .expect("Failed to build config");
+
+        let json_str = serde_json::to_string(&config).expect("Failed to serialize");
+        let parsed = TrainConfig::from_json_str(&json_str);
+        assert!(parsed.is_ok());
+        let parsed_cfg = parsed.unwrap();
+        assert_eq!(parsed_cfg.weight_decay, Some(1e-3));
+        assert_eq!(parsed_cfg.grad_clip, Some(0.5));
+        assert_eq!(parsed_cfg.patience, Some(5));
     }
 }

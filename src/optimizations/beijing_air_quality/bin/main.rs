@@ -23,8 +23,8 @@ async fn main() {
         // Parse the input json document
         let request = parse()?;
 
-        // Parse and validate TrainConfig from the JSON value in the Request
-        let train_config = TrainConfig::from_json_str(&request.train_config.to_string())?;
+        // Deserialize TrainConfig from the JSON value in the Request
+        let train_config: TrainConfig = serde_json::from_value(request.train_config.clone())?;
 
         // Create datasets
         let (dataset_training, dataset_validation) = prepare(
