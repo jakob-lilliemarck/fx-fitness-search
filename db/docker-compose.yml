@@ -3,17 +3,20 @@ services:
     image: postgres:17-alpine
     container_name: fx-durable-ga-db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-fx_durable_ga}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      POSTGRES_DB: ga
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
     ports:
       - "127.0.0.1:5433:5432"
+    networks:
+      - default
     command: >
       postgres
       -c config_file=/etc/postgresql/postgresql.conf
+      -c listen_addresses='*'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -22,17 +25,32 @@ services:
     restart: unless-stopped
 
   migrate:
-    image: postgres:17-alpine
+    image: debian:bookworm-slim
     container_name: fx-durable-ga-migrate
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-fx_durable_ga}
-    volumes:
-      - ./migrate:/app/migrate:ro
-    command: /app/migrate
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-dev}@postgres:5432/ga
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    networks:
+      - default
+    command: |
+      sh -c "
+      apt-get update && apt-get install -y wget && \
+      mkdir -p /app && \
+      wget -O /app/migrate https://github.com/jakob-lilliemarck/fx-fitness-search/releases/download/v0.0.1/migrate && \
+      chmod +x /app/migrate && \
+      sleep 10 && \
+      /app/migrate
+      "
     restart: "no"
+
+networks:
+  default:
+    driver: bridge
 
 volumes:
   postgres_data:
