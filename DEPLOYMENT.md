@@ -59,19 +59,17 @@ tar -xzf beijing-air-quality.tar.gz
 
 ## Release Workflow
 
-1. **Create a version tag:**
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
+**Binaries** (server, client, migrate):
+1. Commit and push your code
+2. Go to GitHub → Actions → "Release Binaries"
+3. Click "Run workflow"
+4. Enter version tag (e.g., `v1.0.0`)
+5. Binaries are published to that release tag
 
-2. **GitHub Actions automatically:**
-   - Builds all binaries (`migrate`, `server`, `client`)
-   - Publishes to GitHub Releases
-
-3. **Datasets are published separately** (one-time):
-   - Manually trigger `.github/workflows/publish-data.yml` in GitHub Actions
-   - Or add new datasets to the workflow matrix and re-trigger
+**Datasets** (one-time):
+1. Go to GitHub → Actions → "Publish Datasets"
+2. Click "Run workflow"
+3. Datasets are published to their configured tags
 
 ## Database Setup
 
