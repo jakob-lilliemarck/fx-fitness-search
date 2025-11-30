@@ -127,3 +127,76 @@ impl<B: Backend> SequenceModel<B> for SimpleLstm<B> {
         self.linear_out.forward(last_step)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use burn::backend::ndarray::NdArray;
+
+    type B = NdArray;
+
+    #[test]
+    fn test_feedforward_forward_shape() {
+        let device = Default::default();
+        let model = FeedForward::<B>::new(&device, 4, 8, 2, 3);
+
+        let input = Tensor::<B, 3>::zeros([2, 3, 4], &device); // [batch=2, seq=3, features=4]
+        let output = model.forward(input);
+
+        assert_eq!(output.dims(), [2, 2]); // [batch=2, output=2]
+    }
+
+    #[test]
+    fn test_feedforward_different_batch_sizes() {
+        let device = Default::default();
+        let model = FeedForward::<B>::new(&device, 4, 8, 2, 3);
+
+        for batch_size in [1, 4, 16] {
+            let input = Tensor::<B, 3>::zeros([batch_size, 3, 4], &device);
+            let output = model.forward(input);
+
+            assert_eq!(output.dims(), [batch_size, 2]);
+        }
+    }
+
+    #[test]
+    fn test_feedforward_produces_output() {
+        let device = Default::default();
+        let model = FeedForward::<B>::new(&device, 4, 8, 2, 3);
+
+        let input = Tensor::<B, 3>::ones([1, 3, 4], &device);
+        let output = model.forward(input);
+
+        // Output should be finite (not NaN or Inf)
+        let output_data = output.clone().into_data();
+        for val in output_data.bytes.chunks_exact(4) {
+            let f = f32::from_le_bytes([val[0], val[1], val[2], val[3]]);
+            assert!(f.is_finite(), "Output contains non-finite value: {}", f);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_feedforward_seq_len_mismatch_panics() {
+        let device = Default::default();
+        // Model built for seq_len=3, input_size=4
+        let model = FeedForward::<B>::new(&device, 4, 8, 2, 3);
+        // Provide seq_len=4 -> flatten size 16, but layer expects 12
+        let bad_input = Tensor::<B, 3>::zeros([1, 4, 4], &device);
+        let _ = model.forward(bad_input);
+    }
+
+    #[test]
+    fn test_feedforward_record_round_trip() {
+        let device = Default::default();
+        let model = FeedForward::<B>::new(&device, 4, 8, 2, 3);
+        let record = model.clone().into_record();
+
+        let model2 = FeedForward::<B>::new(&device, 4, 8, 2, 3).load_record(record);
+
+        let input = Tensor::<B, 3>::ones([2, 3, 4], &device);
+        let out1 = model.forward(input.clone()).into_data().bytes;
+        let out2 = model2.forward(input).into_data().bytes;
+        assert_eq!(out1, out2);
+    }
+}

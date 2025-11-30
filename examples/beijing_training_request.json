@@ -1,0 +1,36 @@
+{
+  "genotype_id": "550e8400-e29b-41d4-a716-446655440000",
+  "train_config": {
+    "input_size": 3,
+    "hidden_size": 16,
+    "output_size": 1,
+    "sequence_length": 24,
+    "prediction_horizon": 1,
+    "features": ["TEMP", "PRES", "WSPM"],
+    "targets": ["TEMP"]
+  },
+  "processors_features": [
+    {
+      "source": "TEMP",
+      "description": "Temperature raw",
+      "interpolation": {"Linear": {"window_size": 2}},
+      "nodes": []
+    },
+    {
+      "source": "PRES",
+      "description": "Pressure raw",
+      "interpolation": {"Linear": {"window_size": 2}},
+      "nodes": []
+    },
+    {
+      "source": "WSPM",
+      "description": "Wind speed raw",
+      "interpolation": {"Linear": {"window_size": 2}},
+      "nodes": []
+    }
+  ],
+  "processors_targets": [],
+  "epochs": 2,
+  "batch_size": 32,
+  "learning_rate": 0.001
+}

@@ -1,6 +1,5 @@
 use super::phenotype::BeijingPhenotype;
-use crate::core::preprocessor::Transform;
-use crate::optimizations::beijing_air_quality::evaluator::RequestVariables;
+use super::protocol::RequestVariables;
 use clap::Subcommand;
 use const_fnv1a_hash::fnv1a_hash_str_32;
 use fx_durable_ga::models::{
@@ -155,10 +154,6 @@ fn parse_mutagen(s: &str) -> Result<Mutagen, String> {
     }
 }
 
-fn parse_transform(s: &str) -> Result<Transform, String> {
-    Transform::try_from(s).map_err(|e| e.to_string())
-}
-
 #[derive(Debug, Subcommand)]
 pub enum BeijingCommand {
     /// Request a genetic algorithm optimization for Beijing air quality prediction
@@ -187,10 +182,21 @@ pub enum BeijingCommand {
         #[arg(long, required = true)]
         prediction_horizon: usize,
 
-        /// Target to predict including any preprocessing (can be specified multiple times)
-        /// Format: dest=source:NODE1 NODE2 ... or dest=source or dest=source:
-        #[arg(long = "target", required = true, value_parser = parse_transform)]
-        targets: Vec<Transform>,
+        /// Number of epochs to train for
+        #[arg(long, default_value = "25")]
+        epochs: usize,
+
+        /// Early stopping patience: number of epochs without improvement before stopping
+        #[arg(long, default_value = "5")]
+        patience: usize,
+
+        /// Epoch at which to start validation
+        #[arg(long, default_value = "10")]
+        validation_start_epoch: usize,
+
+        /// Batch size for training and validation
+        #[arg(long, default_value = "100")]
+        batch_size: usize,
     },
 }
 
@@ -207,11 +213,22 @@ impl BeijingCommand {
                 mutagen,
                 initial_population,
                 prediction_horizon,
-                targets,
+                epochs,
+                patience,
+                validation_start_epoch,
+                batch_size,
             } => {
                 // Hardcode type_name from BeijingPhenotype::NAME
                 let type_name = BeijingPhenotype::NAME;
                 let type_hash: i32 = fnv1a_hash_str_32(type_name) as i32;
+
+                let request_vars = RequestVariables::with_training_params(
+                    prediction_horizon,
+                    epochs,
+                    patience,
+                    validation_start_epoch,
+                    batch_size,
+                );
 
                 svc.new_optimization_request(
                     type_name,
@@ -222,7 +239,7 @@ impl BeijingCommand {
                     mutagen,
                     Crossover::single_point(),
                     Distribution::latin_hypercube(initial_population),
-                    Some(RequestVariables::new(prediction_horizon, targets)),
+                    Some(request_vars),
                 )
                 .await?;
 

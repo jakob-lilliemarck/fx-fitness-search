@@ -1,4 +1,3 @@
 pub mod config;
+pub mod core;
 pub mod optimizations;
-
-pub(crate) mod core;

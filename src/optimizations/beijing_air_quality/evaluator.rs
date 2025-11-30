@@ -1,57 +1,41 @@
-use super::ingestion::PATHS;
-use super::ingestion::build_dataset_from_file;
 use super::phenotype::BeijingPhenotype;
-use crate::core::dataset::SequenceDataset;
-use crate::core::model::{FeedForward, SequenceModel};
-use crate::core::preprocessor::Transform;
-use crate::core::preprocessor::{Cos, Node, Pipeline, Sin};
-use crate::core::train;
+use super::protocol::{Request, RequestVariables, Response};
+use crate::core::ingestion::Extract;
+use crate::core::interpolation::{Interpolation, LinearInterpolator};
+use crate::core::preprocessing::{Cos, Node, Sin};
 use crate::core::train_config::TrainConfig;
-use burn::backend::ndarray::NdArrayDevice;
-use burn::backend::{Autodiff, NdArray};
-use burn::data::dataloader::Dataset;
 use futures::future::BoxFuture;
 use fx_durable_ga::models::{Evaluator, Terminated};
-use serde::Deserialize;
-use serde::Serialize;
 use sqlx::types::Uuid;
-
-pub struct BeijingEvaluator {
-    model_save_path: String,
-}
-
-impl BeijingEvaluator {
-    pub fn new(model_save_path: &str) -> Self {
-        Self {
-            model_save_path: model_save_path.to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RequestVariables {
-    prediction_horizon: usize,
-    targets: Vec<String>,
-}
-
-impl RequestVariables {
-    pub fn new(prediction_horizon: usize, targets: Vec<Transform>) -> Self {
-        let targets = targets
-            .iter()
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>();
-
-        Self {
-            prediction_horizon,
-            targets,
-        }
-    }
-}
+use std::io::Write;
+use std::process::{Command, Stdio};
+use uuid::Uuid as GuidUuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EvaluationError {
     #[error("Missing request data")]
     MissingData,
+    #[error("Worker subprocess failed: {0}")]
+    WorkerFailed(String),
+}
+
+/// The evaluator, registered to the GA evaluator registry
+/// This is a shared runtime configurable struct.
+pub struct BeijingEvaluator {
+    model_save_path: Option<String>,
+}
+
+impl BeijingEvaluator {
+    pub fn new(model_save_path: &str) -> Self {
+        Self {
+            model_save_path: Some(model_save_path.to_string()),
+        }
+    }
+}
+
+fn append_time_transform(extracts: &mut Vec<Extract>, key: &str, period: u32) {
+    extracts.push(Extract::new(key).with_node(Node::Sin(Sin::new(period as f32))));
+    extracts.push(Extract::new(key).with_node(Node::Cos(Cos::new(period as f32))));
 }
 
 impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
@@ -63,145 +47,132 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
         _terminated: &'a Box<dyn Terminated>,
     ) -> BoxFuture<'a, Result<f64, anyhow::Error>> {
         let model_save_path = self.model_save_path.clone();
-
         Box::pin(async move {
-            let req_var: RequestVariables =
-                serde_json::from_value(request.data.clone().ok_or(EvaluationError::MissingData)?)?;
+            // Deserialize RequestVariables from the request.data field.
+            let req_var = serde_json::from_value::<RequestVariables>(
+                request.data.clone().ok_or(EvaluationError::MissingData)?,
+            )?;
 
-            tracing::info!(message = "Request data", req_var = ?req_var);
-            // FIXME
-            // At this point, we should be able to combine the phenotype and the request to create a TrainConfig
-            // The train config shall be passed to train, so it will be written to file.
-            // Then - as part of this refactor, I think it would be wise to also unify pipeline <-> string parsing. It seems we got an uneccessary level
-            // of indirection in phenotype.rs defining "Transform" and "Feature". I would much rather define a single unified way, probably in the preprocessor.rs file
-            // that handles the whole "dest=source:pipeline pipeline" syntax parsing.
+            // feature and target transforms
+            let mut features = phenotype.features().to_vec();
+            let mut targets = Vec::new();
 
-            type Backend = Autodiff<NdArray>;
-            let device = NdArrayDevice::default();
+            // Add geographic location, without any preprocessing
+            features.push(Extract::new("pos_x"));
+            features.push(Extract::new("pos_y"));
 
-            // Build time features (always included) as Transform instances
-            let mut features = vec![
-                Transform {
-                    destination: "hour_sin".to_string(),
-                    source: "hour".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Sin(Sin::new(24.0))]),
-                },
-                Transform {
-                    destination: "hour_cos".to_string(),
-                    source: "hour".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Cos(Cos::new(24.0))]),
-                },
-                Transform {
-                    destination: "month_sin".to_string(),
-                    source: "month".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Sin(Sin::new(12.0))]),
-                },
-                Transform {
-                    destination: "month_cos".to_string(),
-                    source: "month".to_string(),
-                    pipeline: Pipeline::new(vec![Node::Cos(Cos::new(12.0))]),
-                },
-            ];
+            // Append time transforms to features transforms
+            append_time_transform(&mut features, "month", 12);
+            append_time_transform(&mut features, "day_of_week", 7);
+            append_time_transform(&mut features, "hour", 24);
 
-            // Convert phenotype features to Transform instances
-            for (i, feat) in phenotype.features().iter().enumerate() {
-                let destination = format!("feat_{}", i);
-                let source = feat.source.clone();
-                let pipeline = feat.to_pipeline();
-                features.push(Transform {
-                    destination,
-                    source,
-                    pipeline,
-                });
-            }
+            // Append a single target to predict
+            targets.push(
+                Extract::new("TEMP")
+                    .with_interpolation(Interpolation::Linear(LinearInterpolator::new(1))),
+            );
 
-            // Target definition (always TEMP with no preprocessing)
-            let targets = vec![Transform {
-                destination: "target_temp".to_string(),
-                source: "TEMP".to_string(),
-                pipeline: Pipeline::new(vec![]),
-            }];
-
-            // Load data from all stations and combine into unified datasets
-            let mut all_train_items = Vec::new();
-            let mut all_valid_items = Vec::new();
-
-            for path in PATHS {
-                let builder = build_dataset_from_file(path, &features, &targets)?;
-
-                // Split 80/20 train/validation
-                let (train_dataset, valid_dataset) = builder.build(
-                    phenotype.sequence_length,
-                    1, // prediction_horizon = 1 (predict 1 timestep ahead)
-                    Some(0.8),
-                )?;
-
-                // Extract items with metadata from training dataset
-                for i in 0..train_dataset.len() {
-                    if let (Some(item), Some(metadata)) =
-                        (train_dataset.get(i), train_dataset.get_metadata(i))
-                    {
-                        all_train_items.push((metadata.clone(), item));
-                    }
-                }
-
-                // Extract items with metadata from validation dataset
-                if let Some(valid) = valid_dataset {
-                    for i in 0..valid.len() {
-                        if let (Some(item), Some(metadata)) = (valid.get(i), valid.get_metadata(i))
-                        {
-                            all_valid_items.push((metadata.clone(), item));
-                        }
-                    }
-                }
-            }
-
-            // Combine all items into unified datasets
-            let train_dataset = SequenceDataset::from_items(all_train_items);
-            let valid_dataset = SequenceDataset::from_items(all_valid_items);
-
-            let input_size = 4 + phenotype.features().len();
+            // Construct the TrainConfig with training parameters from request
             let train_config = TrainConfig::new(
-                input_size,
                 phenotype.hidden_size,
-                targets.len(),
                 phenotype.sequence_length,
                 req_var.prediction_horizon,
-                features
-                    .iter()
-                    .map(|t| t.to_string())
-                    .collect::<Vec<String>>(),
-                req_var.targets.iter().map(|t| t.to_string()).collect(),
-            );
-
-            // Create FeedForward model
-            let model = FeedForward::<Backend>::new(
-                &device,
-                input_size,
-                phenotype.hidden_size,
-                targets.len(),
-                phenotype.sequence_length,
-            );
-
-            // Create a unique filepath to store the model and config files of this genotype
-            let model_file_path = format!("{}/{}", model_save_path, genotype_id.to_string());
-
-            // Train the model
-            let (_trained_model, best_valid_loss) = train::train(
-                &device,
-                &train_dataset,
-                &valid_dataset,
-                25,  // epochs (fixed)
-                100, // batch_size (fixed)
+                features,
+                targets,
+                req_var.epochs,
+                req_var.batch_size,
                 phenotype.learning_rate,
-                model,
-                Some(model_file_path), // model_save_path (don't save during GA optimization)
-                Some(train_config),    // train_config (don't save config during GA)
-            )
-            .await;
+            )?
+            .with_patience(req_var.patience)?
+            .with_validation_start_epoch(req_var.validation_start_epoch)?;
 
-            // Return validation loss as fitness (cast f32 to f64)
-            Ok(best_valid_loss as f64)
+            // Prepare request for training binary
+            let train_request = Request {
+                genotype_id: GuidUuid::from_bytes(*genotype_id.as_bytes()),
+                train_config: serde_json::to_value(&train_config)?,
+                model_save_path: model_save_path
+                    .map(|p| format!("{}/{}", p, genotype_id.to_string())),
+            };
+
+            // Store the request json document
+            if let Some(path) = train_request
+                .model_save_path
+                .as_ref()
+                .map(|p| format!("{}.request.json", p))
+            {
+                train_request.save(&path)?;
+            }
+
+            tracing::info!(
+                message = "Spawning training binary",
+                genotype_id = genotype_id.to_string()
+            );
+
+            // Spawn subprocess on blocking task to avoid blocking the async runtime
+            let task = tokio::task::spawn_blocking(move || {
+                // Spawn training binary
+                let mut child = Command::new("./target/release/beijing")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|e| {
+                        EvaluationError::WorkerFailed(format!("Failed to spawn binary: {}", e))
+                    })?;
+
+                // Send request to binary via stdin
+                let json_request = serde_json::to_string(&train_request)?;
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin.write_all(json_request.as_bytes()).map_err(|e| {
+                        EvaluationError::WorkerFailed(format!("Failed to write to binary: {}", e))
+                    })?
+                } else {
+                    return Err(EvaluationError::WorkerFailed(
+                        "Failed to connect to binary stdin".to_string(),
+                    )
+                    .into());
+                }
+
+                // Wait for binary to finish and read response
+                let output = child.wait_with_output().map_err(|e| {
+                    EvaluationError::WorkerFailed(format!("Failed to wait for binary: {}", e))
+                })?;
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(EvaluationError::WorkerFailed(format!(
+                        "Binary failed with status {}: {}",
+                        output.status, stderr
+                    ))
+                    .into());
+                }
+
+                // Parse response
+                let response = serde_json::from_slice::<Response>(&output.stdout).map_err(|e| {
+                    EvaluationError::WorkerFailed(format!("Failed to parse binary response: {}", e))
+                })?;
+
+                Ok(response)
+            });
+
+            let response = task
+                .await
+                .map_err(|e| {
+                    if e.is_cancelled() {
+                        // Task was cancelled - this is expected if the fitness evaluation was aborted
+                        tracing::info!("Training task was cancelled");
+                    }
+                    EvaluationError::WorkerFailed(format!("Task failed: {}", e))
+                })?
+                .map_err(|e: anyhow::Error| e)?;
+
+            tracing::info!(
+                message = "Training completed",
+                genotype_id = response.genotype_id.to_string(),
+                fitness = response.fitness
+            );
+
+            Ok(response.fitness)
         })
     }
 }
