@@ -40,17 +40,16 @@ fi
 # Download and extract datasets
 echo "Downloading datasets..."
 DATASETS=(
-    "data-beijing-v1:beijing-air-quality"
+    "beijing-air-quality"
 )
 
-for dataset_entry in "${DATASETS[@]}"; do
-    IFS=':' read -r tag name <<< "$dataset_entry"
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$tag/$name.tar.gz"
+for name in "${DATASETS[@]}"; do
+    DOWNLOAD_URL="https://github.com/$REPO/releases/download/datasets-$name/$name.tar.gz"
     if curl -fL "$DOWNLOAD_URL" -o "$TEMP_DIR/$name.tar.gz" 2>/dev/null; then
         tar -xzf "$TEMP_DIR/$name.tar.gz" -C "$DEST_DIR"
         echo "✓ Downloaded and extracted $name"
     else
-        echo "⚠  Skipped $name (release $tag not found)"
+        echo "⚠  Skipped $name (dataset not found)"
     fi
 done
 
