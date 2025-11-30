@@ -1,0 +1,30 @@
+name: Publish Datasets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dataset:
+          - name: beijing-air-quality
+            path: src/optimizations/beijing_air_quality/data
+            tag: data-beijing-v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Archive ${{ matrix.dataset.name }} dataset
+        run: tar -czf ${{ matrix.dataset.name }}.tar.gz -C $(dirname ${{ matrix.dataset.path }}) $(basename ${{ matrix.dataset.path }})/
+
+      - name: Create ${{ matrix.dataset.name }} Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.dataset.name }}.tar.gz
+          tag_name: ${{ matrix.dataset.tag }}
+          name: "Dataset: ${{ matrix.dataset.name }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
