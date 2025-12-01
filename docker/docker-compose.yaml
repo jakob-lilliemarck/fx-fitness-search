@@ -41,7 +41,7 @@ services:
       sh -c "
       apt-get update && apt-get install -y wget && \
       mkdir -p /app && \
-      wget -O /app/migrate https://github.com/jakob-lilliemarck/fx-fitness-search/releases/download/v0.0.1/migrate && \
+      wget -O /app/migrate https://github.com/jakob-lilliemarck/fx-fitness-search/releases/download/v0.0.2/migrate && \
       chmod +x /app/migrate && \
       sleep 10 && \
       /app/migrate

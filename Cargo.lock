@@ -1193,9 +1193,9 @@ dependencies = [
 
 [[package]]
 name = "fx-durable-ga"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc5d5a49f639739d8f4075477af0c51d520f9697db85f5fb6a1a67a723935c84"
+checksum = "a53081552b1030aa3d283cf7218a7a34890561983b9786300dceb3377de1149f"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1247,9 +1247,9 @@ dependencies = [
 
 [[package]]
 name = "fx-event-bus"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323c3eb1f81264c35cf53ef3960636ef8e900cea1d5c850778f71f33d8125340"
+checksum = "61b64a4879e20d819541415f2b32f10e04807c5c817be9cc3bc10b0f93866d36"
 dependencies = [
  "chrono",
  "const-fnv1a-hash",

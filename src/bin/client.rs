@@ -19,6 +19,12 @@ enum Command {
     /// Beijing air quality domain-specific operations
     #[command(subcommand)]
     Beijing(BeijingCommand),
+    /// Interrupt a running optimization request
+    Interrupt {
+        /// The request ID to interrupt
+        #[arg(long, required = true)]
+        request_id: uuid::Uuid,
+    },
 }
 
 #[tokio::main]
@@ -41,6 +47,10 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         Command::Beijing(cmd) => {
             cmd.execute(client.get_svc()).await?;
+        }
+        Command::Interrupt { request_id } => {
+            client.get_svc().interrupt_request(request_id).await?;
+            tracing::info!("Interrupted optimization request: {}", request_id);
         }
     }
 
