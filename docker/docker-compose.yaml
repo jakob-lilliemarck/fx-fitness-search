@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
     container_name: fx-durable-ga-db
     environment:
       POSTGRES_USER: postgres
@@ -8,15 +10,12 @@ services:
       POSTGRES_DB: ga
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
-      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     ports:
       - "5433:5432"
     networks:
       - default
     command: >
       postgres
-      -c config_file=/etc/postgresql/postgresql.conf
       -c listen_addresses='*'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
