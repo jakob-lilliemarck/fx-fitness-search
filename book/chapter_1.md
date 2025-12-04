@@ -24,6 +24,81 @@ Consider a simple model, a feedforward neural network. Even this seemingly strai
 | Patience | None, 5, 10, 20 | 4 |
 | Model initialization | Default, Xavier, He | 3 |
 
-Total combinations: 5 × 5 × 3 × 5 × 5 × 4 × 3 × 4 × 4 × 4 × 3 = ~864,000 possible configurations
+That is `5 × 5 × 3 × 5 × 5 × 4 × 3 × 4 × 4 × 4 × 3 = ~864,000` possible configurations before even considering the input data or its preprocessing!
 
 Even for a simple feedforward network, the morphological space is massive! Any approach relying on manual experimentation to search such a vast space is at best going to be impractical - this is a problem that calls for a structured quantitative approach.
+
+## Making sense of the mess
+In a previous job of mine, I worked in an innovation hub at one of the largest architectural firms in Sweden. My role at the time, was as _computational designer_, an odd term that often provided people with more questions than answers. As a job title it was not ideal, but it was an interesting job. It involved applying programmatic methods for exploring and manufacturing complex three dimensional forms. The tool I used allowed for geometric optimization by means of a built in genetic algorithm solver. Genetic algorithms (GA) is an idea that takes its inspiration from Darwinian evolution theory and employs operations such as "mutation" and "crossover" on candidate solutions, hypothesizing that two fit solutions are likely to have fit offspring. As it turns out GA is also a commonly used tool for optimizing machine learning training parameters, model architectures and for feature selection.
+
+A few weeks back and with all of the above in mind I wrote a simple event driven GA library with Postgres persistence for Rust. I will not be going in to the technical details of the library here as this chapter is about putting to the test. However, I welcome you to check it out, should you be interested:
+
+https://github.com/jakob-lilliemarck/fx-durable-ga
+
+The question on my mind was:
+> Could genetic algorithms be a way to search for "predictive ability" over feature selection, preprocessing, model architecture and training parameters combined?
+
+Searching for a good solution across all of those, is after all the reality of training just about any model on any dataset, and surely that's a space is bound to be so large that its impractical, improbable and perhaps even impossible, for any manual process to find a global optimum, or even a good local one. In search of an answer to my question I set up a project to attempt a combined search for predictive ability using the "Beijing Multi-Site Air Quality" dataset (Chen, 2017) while making use of my new library `fx-durable-ga`. You can find the project here:
+
+https://github.com/jakob-lilliemarck/fx-fitness-search
+
+### Genetic encoding and fitness
+So how does one connect a genetic algorithm to a research question, and get it to search and find candidate solutions? Lets for a moment consider a much smaller and much simpler search space to illustrate this process.
+
+Lets imagine that we're searching for a point `A` within a cube. The cube can be represented using the cartesian coordinate system, within which it occupies some space along each of the three axis `X`, `Y` and `Z`. The geometric bounds of the cube could be defined as a maximum and a minimum value along each axis. For simplicities sake, let's say the cube occupies the space between the point `{0.0, 0.0, 0.0}` and `{1.0, 1.0, 1.0}`, the full cube could then be described as:
+```json
+{
+  x_axis: { min: 0.0, max: 1.0 },
+  y_axis: { min: 0.0, max: 1.0 },
+  z_axis: { min: 0.0, max: 1.0 }
+}
+```
+
+In terms of our search that definition now defines all valid candidate solutions, the infinite number of points within the cube, and separates them from the much larger infinite number of invalid solutions outside of the cube. As such, the definitions effectively captures the _morphology_ of our candidate solution.
+
+We could then say that the _fittest candidate solution_ (a point) will be at zero distance from `A`, the point we're search for.
+
+Now we mostly have what we need to generate candidate solutions. For reasons beyond this example, the framework I've written requires genes to be integers, so in order to adapt this example and adhere to those requirements we'll need to also define the number of steps, the resolution, along each axis. In other words we'll need to _discretize_ the space.
+
+Every valid point along an axis `{ min: 0.0, max: 1.0, steps: 11 }` could then be described as one of the 11 integer numbers between 0 and 10. We now possess the means of _encoding_ and _decoding_ a point to its "genomic representation" through the _morphological bounds_ of the cube. To give an example:
+```json
+// morphology
+[
+  { min: 0.0, max: 1.0, steps: 11 }, // x axis
+  { min: 0.0, max: 1.0, steps: 11 }, // y axis
+  { min: 0.0, max: 1.0, steps: 11 }  // z axis
+]
+
+// point candidate solution
+point = {
+  x: 0.2,
+  y: 0.1,
+  z: 0.9
+}
+
+// encoded as genome
+encoded = [
+  2, // 0.2 * (11 - 1) = 0.2 * 10 = 2, subtract 1 from 11 as both bounds are inclusive
+  1, // 0.1 * (11 - 1) = 0.1 * 10 = 1
+  9  // 0.9 * (11 - 1) = 0.9 * 10 = 9
+]
+
+decoded = {
+  x: 0.2, // 2 / (11 - 1) = 2 / 10 = 0.2
+  y: 0.1, // 1 / (11 - 1) = 1 / 10 = 0.1
+  z: 0.9  // 9 / (11 - 1) = 9 / 10 = 0.9
+}
+```
+
+Using the morphological definition, the GA framework and now _generate_, _breed_ and _mutate_ genomes as well as evaluating their _fitness_ as their distance from `A`. That is essentially the basics of a genetic algorithm optimization solver.
+
+### Putting it in context
+
+### The experiment
+TBD
+
+### Constraining the model
+TBD
+
+### Conclusions and next steps
+TBD
