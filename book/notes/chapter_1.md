@@ -45,57 +45,86 @@ https://github.com/jakob-lilliemarck/fx-fitness-search
 ### Genetic encoding and fitness
 So how does one connect a genetic algorithm to a research question, and get it to search and find candidate solutions? Lets for a moment consider a much smaller and much simpler search space to illustrate this process.
 
-Lets imagine that we're searching for a point `A` within a cube. The cube can be represented using the cartesian coordinate system, within which it occupies some space along each of the three axis `X`, `Y` and `Z`. The geometric bounds of the cube could be defined as a maximum and a minimum value along each axis. For simplicities sake, let's say the cube occupies the space between the point `{0.0, 0.0, 0.0}` and `{1.0, 1.0, 1.0}`, the full cube could then be described as:
+Lets imagine that we're searching for a point `A` within a cube. The cube can be represented using the cartesian coordinate system, within which it occupies some space along each of the three axis `X`, `Y` and `Z`. The geometric bounds of the cube could be defined as a maximum and a minimum value along each axis. For simplicities sake, let's say the cube occupies the space between the point `[0.0, 0.0, 0.0]` and `[1.0, 1.0, 1.0]`, the full cube could then be described as the following:
 ```json
-{
-  x_axis: { min: 0.0, max: 1.0 },
-  y_axis: { min: 0.0, max: 1.0 },
-  z_axis: { min: 0.0, max: 1.0 }
-}
+[
+  { min: 0.0, max: 1.0 }, // x_axis
+  { min: 0.0, max: 1.0 }, // y_axis
+  { min: 0.0, max: 1.0 }  // z_axis
+]
 ```
 
-In terms of our search that definition now defines all valid candidate solutions, the infinite number of points within the cube, and separates them from the much larger infinite number of invalid solutions outside of the cube. As such, the definitions effectively captures the _morphology_ of our candidate solution.
+That now defines all valid candidate solutions, the infinite number of points within the cube, and separates them from the much larger infinite number of invalid solutions outside of the cube. As such, the definition effectively captures the _morphology_ of our candidate solution, _the space we're searching within_.
 
-We could then say that the _fittest candidate solution_ (a point) will be at zero distance from `A`, the point we're search for.
+We could then say that the _fittest candidate solution_ (a point) will be at zero distance from `A`, the point we're search for. To compute the _fitness_ of a candidate, we measure its distance to `A`. Points closer to `A` will have a lower fitness, while points further a away will have a higher fitness value - our optimization will strive to minimize fitness.
 
-Now we mostly have what we need to generate candidate solutions. For reasons beyond this example, the framework I've written requires genes to be integers, so in order to adapt this example and adhere to those requirements we'll need to also define the number of steps, the resolution, along each axis. In other words we'll need to _discretize_ the space.
+Now we mostly have what we need to generate candidate solutions. For reasons beyond this example, the framework I've written requires genes to be integers, so in order to adapt this example and adhere to those requirements we'll need to also define the number of steps, the resolution, along each axis. In other words we'll need to _discretize_ the space. Discretizing the search space also limits it to a finite number of solutions and makes the resolution explicit.
 
-Every valid point along an axis `{ min: 0.0, max: 1.0, steps: 11 }` could then be described as one of the 11 integer numbers between 0 and 10. We now possess the means of _encoding_ and _decoding_ a point to its "genomic representation" through the _morphological bounds_ of the cube. To give an example:
+Every valid point along an axis `{ min: 0.0, max: 1.0, steps: 11 }` could then be described as one of the 11 integer numbers between 0 and 10. We now possess the means of _encoding_ and _decoding_ a point through the _morphological bounds_ of the cube. We call the decoded form the _phenotype_, a term from genetics encompassing the observable traits of an organism, and the _encoded_ form the _genotype_, the genetic information of that organism. To give an example:
 ```json
-// morphology
+// Morphology, the space we search solutions within
 [
-  { min: 0.0, max: 1.0, steps: 11 }, // x axis
-  { min: 0.0, max: 1.0, steps: 11 }, // y axis
-  { min: 0.0, max: 1.0, steps: 11 }  // z axis
+  { min: 0.0, max: 1.0, steps: 11 },
+  { min: 0.0, max: 1.0, steps: 11 },
+  { min: 0.0, max: 1.0, steps: 11 }
 ]
 
-// point candidate solution
-point = {
+// Point candidate solution, phenotype representation
+{
   x: 0.2,
   y: 0.1,
   z: 0.9
 }
 
-// encoded as genome
-encoded = [
+// Candidate solution, encoded to its genotype representation
+[
   2, // 0.2 * (11 - 1) = 0.2 * 10 = 2, subtract 1 from 11 as both bounds are inclusive
   1, // 0.1 * (11 - 1) = 0.1 * 10 = 1
   9  // 0.9 * (11 - 1) = 0.9 * 10 = 9
 ]
 
-decoded = {
+// Candidate solution, decoded to its phenotype representation
+{
   x: 0.2, // 2 / (11 - 1) = 2 / 10 = 0.2
   y: 0.1, // 1 / (11 - 1) = 1 / 10 = 0.1
   z: 0.9  // 9 / (11 - 1) = 9 / 10 = 0.9
 }
 ```
 
-Using the morphological definition, the GA framework and now _generate_, _breed_ and _mutate_ genomes as well as evaluating their _fitness_ as their distance from `A`. That is essentially the basics of a genetic algorithm optimization solver.
+This business of encoding and decoding may feel like jumping through hoops. However this transformation allows us to represent both integer and decimal numbers, booleans and enumerations, which together allows for expressing most conceivable search spaces while allowing the framework to handle any gene of any search space in a uniform manner. Using the morphological definition, the GA framework can now _generate_, _breed_ and _mutate_ genomes as well as evaluating their _fitness_. That is the basics of a genetic algorithm optimization solver.
 
 ### Putting it in context
 
+Returning to the hypothesis:
+> Could genetic algorithms be a way to search for "predictive ability" over feature selection, preprocessing, model architecture and training parameters combined?
+
+Looking at the dataset, and considering this question I drew a few conclusions:
+- I wanted the algorithm to freely be able to select an arbitrary number of data points from the input dataset, optimizing _feature selection_.
+- I wanted the algorithm to freely be able to select up to a predefined number of preprocessing methods for each data point, optimizing _feature engineering_.
+- I wanted to optimize model architecture and training parameters _together_ with with feature selection and feature engineering.
+
+The idea is simple. Only some combinations of features and preprocessor will provide the training loop with good learnable patterns while most will just be noise. But representing optional values within our GA poses a new challenge as the genotype encoding relies on the _position_ of genes. So how to represent those "arbitrary number of" or "up to" expressions?
+
+What if we used 2 genes to "wrap" the genes encoding a specific attribute? Something like:
+- One gene bounded at 0 and 1 with 2 steps, encoding if the wrapped "block" is active or not.
+- One gene bounded between 0 and the number of options (column names, preprocessor types, etc.), acting like a "selector".
+
+```json
+[
+  // The on/off "block toggle"
+  { min: 0.0, max: 1.0, steps: 2 },
+  // The "column selector", there are 12 columns of interest.
+  { min: 0.0, max: 11.0, steps: 12 },
+  // .. the gene or genes wrapped by the toggle and the selector follow here
+]
+```
+
+This design comes with the constraint that the wrapped genes must be of equal length and must share the same number of options per gene. While it didn't feel ideal, I decided it was good enough for now.
+
 ### The experiment
-TBD
+So, did it work!? Well, no, maybe a little?
+
+
 
 ### Constraining the model
 TBD

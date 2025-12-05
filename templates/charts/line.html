@@ -1,0 +1,4 @@
+<canvas id="chart-{{ self.id() }}"></canvas>
+<script>
+    new Chart(document.getElementById('chart-{{ self.id() }}'), {{ self.config_json()|safe }});
+</script>

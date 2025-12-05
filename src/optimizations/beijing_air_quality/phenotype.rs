@@ -845,3 +845,29 @@ impl Encodeable for BeijingPhenotype {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_morphology_gene_count() {
+        let bounds = Extract::morphology().expect("Failed to get Extract morphology");
+        assert_eq!(
+            bounds.len(),
+            8,
+            "Extract should produce 8 genes: 1 (source) + 1 (interpolation) + 3 (layer1) + 3 (layer2)"
+        );
+    }
+
+    #[test]
+    fn test_toggle_extract_morphology_gene_count() {
+        let bounds =
+            Toggle::<Extract>::morphology().expect("Failed to get Toggle<Extract> morphology");
+        assert_eq!(
+            bounds.len(),
+            9,
+            "Toggle<Extract> should produce 9 genes: 1 (enabled) + 8 (Extract)"
+        );
+    }
+}
