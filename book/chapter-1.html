@@ -29,6 +29,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: calc(8 * var(--spacing));
+                padding: calc(16 * var(--spacing)) calc(8 * var(--spacing));
             }
             section {
                 display: flex;
@@ -40,6 +41,15 @@
             h3,
             p {
                 margin: 0;
+            }
+            h1 {
+                font-size: 2.5rem;
+                line-height: 1.2;
+                margin-bottom: calc(4 * var(--spacing));
+            }
+            h2 {
+                font-size: 1.75rem;
+                line-height: 1.3;
             }
             a {
                 color: var(--primary);
@@ -404,6 +414,7 @@
                 I wanted to optimize model architecture and training parameters
                 together with with feature selection and feature engineering.
             </li>
+        </ul>
             <p>
                 The idea is simple. Only some combinations of features and
                 preprocessor will provide the training loop with good learnable
@@ -446,9 +457,9 @@
     <section>
         <h2>The experiment</h2>
         <p>TBD</p>
-        <canvas id="chart-019af006-a1a5-7ef3-b47e-5d846b6f466e"></canvas>
+        <canvas id="chart-019af225-2a88-7b21-b9d0-a96fb269841c"></canvas>
 <script>
-    new Chart(document.getElementById('chart-019af006-a1a5-7ef3-b47e-5d846b6f466e'), {"type":"line","data":{"labels":["Jan","Feb","Mar"],"datasets":[{"label":"Sales","data":[65.0,59.0,80.0],"borderColor":"rgb(255, 0, 128)","tension":0.1}]}});
+    new Chart(document.getElementById('chart-019af225-2a88-7b21-b9d0-a96fb269841c'), {"type":"line","data":{"labels":["Jan","Feb","Mar"],"datasets":[{"label":"Sales","data":[65.0,59.0,80.0],"borderColor":"rgb(255, 0, 128)","tension":0.1}]}});
 </script>
         <p>TBD</p>
     </section>
