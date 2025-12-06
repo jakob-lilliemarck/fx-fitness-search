@@ -7,7 +7,7 @@
         <style>
             :root {
                 --primary: #ff0080;
-                --secondary: #000;
+                --text: #222;
                 --font-md: 1rem;
                 --font-sm: 0.875rem;
                 --spacing: 0.25rem;
@@ -15,11 +15,17 @@
             html,
             body {
                 font-size: var(--font-md);
-                font-family: Arial, sans-serif;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    "Helvetica Neue", Arial, sans-serif;
+                line-height: 1.65;
+                color: var(--text);
                 display: flex;
                 flex: 1 1;
                 flex-direction: column;
                 justify-content: center;
+                margin: 0;
+                padding: 0;
             }
             body {
                 max-width: 900px;
@@ -28,13 +34,37 @@
             article {
                 display: flex;
                 flex-direction: column;
-                gap: calc(8 * var(--spacing));
                 padding: calc(16 * var(--spacing)) calc(8 * var(--spacing));
+            }
+            article > header {
+                margin-bottom: calc(8 * var(--spacing));
+                padding-bottom: calc(4 * var(--spacing));
+                border-bottom: 2px solid #eaeaea;
+                display: flex;
+                flex-direction: column;
+            }
+            .meta {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: calc(1 * var(--spacing));
+                margin-bottom: calc(2 * var(--spacing));
+                font-size: var(--font-sm);
+                color: #999;
+                text-align: right;
+            }
+            .meta .author,
+            .meta .date {
+                display: block;
             }
             section {
                 display: flex;
                 flex-direction: column;
-                gap: calc(4 * var(--spacing));
+            }
+            section + section {
+                border-top: 1px solid #eaeaea;
+                margin-top: calc(8 * var(--spacing));
+                padding-top: calc(6 * var(--spacing));
             }
             h1,
             h2,
@@ -51,8 +81,16 @@
                 font-size: 1.75rem;
                 line-height: 1.3;
             }
+            /* Gentle spacing between consecutive paragraphs */
+            p + p {
+                margin-top: calc(3 * var(--spacing));
+            }
             a {
                 color: var(--primary);
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
             }
             table {
                 border-collapse: collapse;
@@ -84,11 +122,47 @@
                 font-family: "Courier New", monospace;
                 font-size: var(--font-sm);
             }
+            pre {
+                background-color: #f5f5f5;
+                padding: 1rem;
+                border-radius: calc(2 * var(--spacing));
+                overflow-x: auto;
+                margin: calc(3 * var(--spacing)) 0;
+                box-sizing: border-box;
+                max-width: 100%;
+            }
+            canvas {
+                max-width: 100%;
+                height: auto;
+            }
             pre code {
                 background-color: transparent;
                 color: inherit;
                 padding: 0;
                 border-radius: 0;
+            }
+            /* Mobile optimizations */
+            @media (max-width: 768px) {
+                :root {
+                    --font-md: 0.9rem;
+                    --font-sm: 0.8rem;
+                }
+                article {
+                    padding: calc(8 * var(--spacing)) calc(4 * var(--spacing));
+                }
+                h1 {
+                    font-size: 2rem;
+                }
+                h2 {
+                    font-size: 1.5rem;
+                }
+                pre,
+                code {
+                    font-size: 0.75rem;
+                }
+                pre {
+                    max-width: calc(100vw - calc(8 * var(--spacing)));
+                }
             }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -102,7 +176,13 @@
     <body>
         
 <article>
-    <h1>In search of predictive ability</h1>
+    <header>
+        <div class="meta">
+            <span class="author">Jakob Lilliemarck</span>
+            <span class="date">December 2025</span>
+        </div>
+        <h1>In search of predictive ability</h1>
+    </header>
     <section>
         <h2>Regurgitating nonsense</h2>
         <p>
@@ -304,13 +384,11 @@
             <code>[1.0, 1.0, 1.0]</code>, the full cube could then be described
             as the following:
         </p>
-        <pre><code code class="language-json">
-[
+<pre><code code class="language-json">[
   { min: 0.0, max: 1.0 }, // x_axis
   { min: 0.0, max: 1.0 }, // y_axis
   { min: 0.0, max: 1.0 }  // z_axis
-]
-        </code></pre>
+]</code></pre>
         <p>
             That now defines all valid candidate solutions, the infinite number
             of points within the cube, and separates them from the much larger
@@ -345,8 +423,7 @@
             traits of an organism, and the encoded form the genotype, the
             genetic information of that organism. To give an example:
         </p>
-        <pre><code code class="language-json">
-// Morphology, the space we search solutions within
+        <pre><code code class="language-json">// Morphology, the space we search solutions within
 [
   { min: 0.0, max: 1.0, steps: 11 },
   { min: 0.0, max: 1.0, steps: 11 },
@@ -362,7 +439,7 @@
 
 // Candidate solution, encoded to its genotype representation
 [
-  2, // 0.2 * (11 - 1) = 0.2 * 10 = 2, subtract 1 from 11 as both bounds are inclusive
+  2, // 0.2 * (11 - 1) = 0.2 * 10 = 2,
   1, // 0.1 * (11 - 1) = 0.1 * 10 = 1
   9  // 0.9 * (11 - 1) = 0.9 * 10 = 9
 ]
@@ -372,8 +449,7 @@
   x: 0.2, // 2 / (11 - 1) = 2 / 10 = 0.2
   y: 0.1, // 1 / (11 - 1) = 1 / 10 = 0.1
   z: 0.9  // 9 / (11 - 1) = 9 / 10 = 0.9
-}
-        </code></pre>
+}</code></pre>
         <p>
             This business of encoding and decoding may feel like jumping through
             hoops. However this transformation allows us to represent both
@@ -437,15 +513,13 @@
                     names, preprocessor types, etc.), acting like a "selector".
                 </li>
             </ul>
-            <pre><code code class="language-json">
-[
+<pre><code code class="language-json">[
     // The on/off "block toggle"
     { min: 0.0, max: 1.0, steps: 2 },
     // The "column selector", there are 12 columns of interest.
     { min: 0.0, max: 11.0, steps: 12 },
     // .. the gene or genes wrapped by the toggle and the selector follow here
-]
-            </code></pre>
+]</code></pre>
             <p>
                 This design comes with the constraint that the wrapped genes
                 must be of equal length and must share the same number of
@@ -457,9 +531,9 @@
     <section>
         <h2>The experiment</h2>
         <p>TBD</p>
-        <canvas id="chart-019af225-2a88-7b21-b9d0-a96fb269841c"></canvas>
+        <canvas id="chart-019af25d-6aec-79a2-87b6-35afeb68b589"></canvas>
 <script>
-    new Chart(document.getElementById('chart-019af225-2a88-7b21-b9d0-a96fb269841c'), {"type":"line","data":{"labels":["Jan","Feb","Mar"],"datasets":[{"label":"Sales","data":[65.0,59.0,80.0],"borderColor":"rgb(255, 0, 128)","tension":0.1}]}});
+    new Chart(document.getElementById('chart-019af25d-6aec-79a2-87b6-35afeb68b589'), {"type":"line","data":{"labels":["Jan","Feb","Mar"],"datasets":[{"label":"Sales","data":[65.0,59.0,80.0],"borderColor":"rgb(255, 0, 128)","tension":0.1}]}});
 </script>
         <p>TBD</p>
     </section>

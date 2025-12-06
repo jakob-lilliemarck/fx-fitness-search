@@ -1,6 +1,12 @@
 {% extends "index.html" %} {% block content %}
 <article>
-    <h1>{{ heading }}</h1>
+    <header>
+        <div class="meta">
+            <span class="author">{{ author }}</span>
+            <span class="date">{{ self.publication_date() }}</span>
+        </div>
+        <h1>{{ heading }}</h1>
+    </header>
     <section>
         <h2>Regurgitating nonsense</h2>
         <p>
@@ -202,13 +208,11 @@
             <code>[1.0, 1.0, 1.0]</code>, the full cube could then be described
             as the following:
         </p>
-        <pre><code code class="language-json">
-[
+<pre><code code class="language-json">[
   { min: 0.0, max: 1.0 }, // x_axis
   { min: 0.0, max: 1.0 }, // y_axis
   { min: 0.0, max: 1.0 }  // z_axis
-]
-        </code></pre>
+]</code></pre>
         <p>
             That now defines all valid candidate solutions, the infinite number
             of points within the cube, and separates them from the much larger
@@ -243,8 +247,7 @@
             traits of an organism, and the encoded form the genotype, the
             genetic information of that organism. To give an example:
         </p>
-        <pre><code code class="language-json">
-// Morphology, the space we search solutions within
+        <pre><code code class="language-json">// Morphology, the space we search solutions within
 [
   { min: 0.0, max: 1.0, steps: 11 },
   { min: 0.0, max: 1.0, steps: 11 },
@@ -260,7 +263,7 @@
 
 // Candidate solution, encoded to its genotype representation
 [
-  2, // 0.2 * (11 - 1) = 0.2 * 10 = 2, subtract 1 from 11 as both bounds are inclusive
+  2, // 0.2 * (11 - 1) = 0.2 * 10 = 2,
   1, // 0.1 * (11 - 1) = 0.1 * 10 = 1
   9  // 0.9 * (11 - 1) = 0.9 * 10 = 9
 ]
@@ -270,8 +273,7 @@
   x: 0.2, // 2 / (11 - 1) = 2 / 10 = 0.2
   y: 0.1, // 1 / (11 - 1) = 1 / 10 = 0.1
   z: 0.9  // 9 / (11 - 1) = 9 / 10 = 0.9
-}
-        </code></pre>
+}</code></pre>
         <p>
             This business of encoding and decoding may feel like jumping through
             hoops. However this transformation allows us to represent both
@@ -335,15 +337,13 @@
                     names, preprocessor types, etc.), acting like a "selector".
                 </li>
             </ul>
-            <pre><code code class="language-json">
-[
+<pre><code code class="language-json">[
     // The on/off "block toggle"
     { min: 0.0, max: 1.0, steps: 2 },
     // The "column selector", there are 12 columns of interest.
     { min: 0.0, max: 11.0, steps: 12 },
     // .. the gene or genes wrapped by the toggle and the selector follow here
-]
-            </code></pre>
+]</code></pre>
             <p>
                 This design comes with the constraint that the wrapped genes
                 must be of equal length and must share the same number of

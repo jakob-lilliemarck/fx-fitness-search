@@ -5,6 +5,8 @@ use fx_durable_ga_app::book::chapters::Chapter1;
 use fx_durable_ga_app::book::charts::{Chart, ChartDataset, LineChartData};
 use uuid::Uuid;
 
+const AUTHOR: &str = "Jakob Lilliemarck";
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create chart from data (later: load from CSV)
     let chart = Chart::Line {
@@ -25,6 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create chapter with rendered chart
     let chapter = Chapter1 {
+        author: AUTHOR.to_string(),
+        date: chrono::NaiveDate::from_ymd_opt(2025, 12, 6).expect("Could not create date"),
         heading: "In search of predictive ability".to_string(),
         base_url: "https://example.com".to_string(),
         chart_html,
