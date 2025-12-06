@@ -6,7 +6,7 @@
         <title>Signal in the noise</title>
         <style>
             :root {
-                --primary: #ff0080;
+                --primary: #4800b0; /*#ff0080*/
                 --text: #222;
                 --font-md: 1rem;
                 --font-sm: 0.875rem;
@@ -39,7 +39,6 @@
             article > header {
                 margin-bottom: calc(8 * var(--spacing));
                 padding-bottom: calc(4 * var(--spacing));
-                border-bottom: 2px solid #eaeaea;
                 display: flex;
                 flex-direction: column;
             }
@@ -81,7 +80,6 @@
                 font-size: 1.75rem;
                 line-height: 1.3;
             }
-            /* Gentle spacing between consecutive paragraphs */
             p + p {
                 margin-top: calc(3 * var(--spacing));
             }
@@ -166,9 +164,9 @@
             }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-        <!-- For Prism.js -->
+        <!-- For Prism.js with Night Owl theme -->
         <link
-            href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css"
+            href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-night-owl.min.css"
             rel="stylesheet"
         />
         <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
