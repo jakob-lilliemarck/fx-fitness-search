@@ -207,10 +207,11 @@
             <code>[1.0, 1.0, 1.0]</code>, the full cube could then be described
             as the following:
         </p>
-        <pre><code class="language-javascript">[
-  { min: 0.0, max: 1.0 }, // x_axis
-  { min: 0.0, max: 1.0 }, // y_axis
-  { min: 0.0, max: 1.0 }  // z_axis
+        <pre><code class="language-javascript">// X, Y and Z axis
+[
+  { min: 0.0, max: 1.0 },
+  { min: 0.0, max: 1.0 },
+  { min: 0.0, max: 1.0 }
 ]</code></pre>
         <p>
             That now defines all valid candidate solutions, the infinite number
@@ -260,19 +261,12 @@
   z: 0.9
 }
 
-// Candidate solution, encoded to its genotype representation
+// Candidate solution, encoded to genotype representation
 [
   2, // 0.2 * (11 - 1) = 0.2 * 10 = 2,
   1, // 0.1 * (11 - 1) = 0.1 * 10 = 1
   9  // 0.9 * (11 - 1) = 0.9 * 10 = 9
-]
-
-// Candidate solution, decoded to its phenotype representation
-{
-  x: 0.2, // 2 / (11 - 1) = 2 / 10 = 0.2
-  y: 0.1, // 1 / (11 - 1) = 1 / 10 = 0.1
-  z: 0.9  // 9 / (11 - 1) = 9 / 10 = 0.9
-}</code></pre>
+]</code></pre>
         <p>
             This business of encoding and decoding may feel like jumping through
             hoops. However this transformation allows us to represent both
@@ -339,9 +333,9 @@
 <pre><code class="language-javascript">[
     // The on/off "block toggle"
     { min: 0.0, max: 1.0, steps: 2 },
-    // The "column selector", there are 12 columns of interest.
+    // The "column selector", there are 12 columns of interest
     { min: 0.0, max: 11.0, steps: 12 },
-    // .. the gene or genes wrapped by the toggle and the selector follow here
+    // .. the wrapped gene(s) follow here
 ]</code></pre>
             <p>
                 This design comes with the constraint that the wrapped genes
