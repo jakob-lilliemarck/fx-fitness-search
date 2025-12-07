@@ -320,8 +320,8 @@ mod tests {
     use crate::core::ingestion::Extract;
     use crate::core::model::FeedForward;
     use burn::backend::Autodiff as AD;
-    use burn_ndarray::NdArray;
     use burn::data::dataloader::Dataset;
+    use burn_ndarray::NdArray;
 
     // These tests exercise the pure helpers and add small smoke tests for the
     // training/validation loops using the NdArray backend.
@@ -532,8 +532,8 @@ mod wgpu_tests {
     use super::*;
     use crate::core::model::FeedForward;
     use burn::backend::Autodiff;
-    use burn_wgpu::{Wgpu, WgpuDevice};
     use burn::data::dataloader::Dataset;
+    use burn_wgpu::{Wgpu, WgpuDevice};
 
     type B = Autodiff<Wgpu>;
 
@@ -625,11 +625,7 @@ mod wgpu_tests {
         let batcher = SequenceBatcher::<Wgpu>::new();
 
         let valid_loss = run_validation_epoch::<Wgpu, _>(
-            &dataset,
-            &batcher,
-            &device,
-            &model,
-            2, // batch_size
+            &dataset, &batcher, &device, &model, 2, // batch_size
         );
 
         // Verify validation produces finite loss
