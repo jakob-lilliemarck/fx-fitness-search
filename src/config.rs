@@ -173,13 +173,25 @@ impl ServerConfig {
 
         let model_save_path = ModelSavePath::from_env()?;
 
-        // Determine worker count.
-        // Calculate default as half the physical cores (NdArray ~2 cores/worker).
-        // If MAX_WORKERS env var is set, cap the result to not exceed that limit.
-        let physical_cores = num_cpus::get_physical();
-        let default_workers = physical_cores / 2;
+        // Determine worker count based on backend.
         let max_workers = MaxWorkers::from_env()?;
-        let workers = max_workers.map_or(default_workers, |max| default_workers.min(max));
+        
+        #[cfg(feature = "backend-ndarray")]
+        let workers = {
+            // For CPU backend: default to half physical cores, capped by MAX_WORKERS if set
+            let physical_cores = num_cpus::get_physical();
+            let default_workers = physical_cores / 2;
+            max_workers.map_or(default_workers, |max| default_workers.min(max))
+        };
+        
+        #[cfg(not(feature = "backend-ndarray"))]
+        let workers = {
+            // For GPU backend: use MAX_WORKERS directly, error if not set
+            max_workers.ok_or_else(|| ConfigError::Missing {
+                key: MaxWorkers::NAME.to_string(),
+                message: "MAX_WORKERS is required when using GPU backend".to_string(),
+            })?
+        };
 
         tracing::info!(
             message = "Configuration loaded",

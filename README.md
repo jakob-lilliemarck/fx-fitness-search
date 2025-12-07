@@ -40,8 +40,37 @@ The migrate binary ensures all migrations are run on the database. You can run i
 target/release/migrate
 ```
 
+## Building
+
+### Backend Selection
+
+This project supports multiple Burn backends for neural network training, selectable at compile time.
+
+**Default (WGPU - GPU Accelerated):**
+```bash
+cargo build --release
+# Or explicitly:
+cargo build --release --all
+```
+Uses WGPU backend for GPU acceleration via Vulkan/Metal/DirectX. Automatically falls back to CPU if no GPU is available.
+
+**CPU Only (NdArray):**
+```bash
+cargo build --release --no-default-features --features backend-ndarray
+```
+Uses NdArray backend for CPU-only training.
+
+**Requirements for GPU (WGPU) on Linux:**
+- NVIDIA: `sudo pacman -S nvidia nvidia-utils vulkan-icd-loader`
+- AMD: `sudo pacman -S mesa vulkan-radeon vulkan-icd-loader`
+- Intel: `sudo pacman -S mesa vulkan-intel vulkan-icd-loader`
+
+Verify GPU support: `vulkaninfo --summary`
+
+See [docs/BACKENDS.md](docs/BACKENDS.md) for detailed backend documentation.
+
 ## Usage
-Usage examples assume the binaries were compiled locally using `cargo build --release --all` and run from the directory root.
+Usage examples assume the binaries were compiled locally and run from the directory root.
 
 ### 1. Start the Server
 
