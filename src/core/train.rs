@@ -320,7 +320,7 @@ mod tests {
     use crate::core::ingestion::Extract;
     use crate::core::model::FeedForward;
     use burn::backend::Autodiff as AD;
-    use burn::backend::ndarray::NdArray;
+    use burn_ndarray::NdArray;
     use burn::data::dataloader::Dataset;
 
     // These tests exercise the pure helpers and add small smoke tests for the
@@ -522,5 +522,118 @@ mod tests {
         let (_m, best_valid) =
             train_sync::<B, _>(&device, &ds_train, &ds_valid, model, None, config);
         assert!(best_valid.is_infinite());
+    }
+}
+
+// WGPU-specific integration tests
+// These verify that the WGPU backend works correctly (on GPU or CPU fallback)
+#[cfg(all(test, feature = "backend-wgpu"))]
+mod wgpu_tests {
+    use super::*;
+    use crate::core::model::FeedForward;
+    use burn::backend::Autodiff;
+    use burn_wgpu::{Wgpu, WgpuDevice};
+    use burn::data::dataloader::Dataset;
+
+    type B = Autodiff<Wgpu>;
+
+    // Minimal dataset for integration tests
+    struct VecDataset {
+        items: Vec<SequenceDatasetItem>,
+    }
+    impl Dataset<SequenceDatasetItem> for VecDataset {
+        fn get(&self, index: usize) -> Option<SequenceDatasetItem> {
+            self.items.get(index).cloned()
+        }
+        fn len(&self) -> usize {
+            self.items.len()
+        }
+    }
+
+    fn make_items(n: usize, seq_len: usize, feat: usize, out: usize) -> Vec<SequenceDatasetItem> {
+        let mut items = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut features = Vec::with_capacity(seq_len);
+            for s in 0..seq_len {
+                let mut ts = Vec::with_capacity(feat);
+                for f in 0..feat {
+                    ts.push((i + s + f) as f32);
+                }
+                features.push(ts);
+            }
+            let mut target = Vec::with_capacity(out);
+            for o in 0..out {
+                target.push((i + o) as f32);
+            }
+            items.push(SequenceDatasetItem { features, target });
+        }
+        items
+    }
+
+    #[test]
+    fn test_wgpu_device_creation() {
+        // Verify we can create a WGPU device (CPU or GPU)
+        let _device = WgpuDevice::default();
+        // If this runs without panic, device creation works
+    }
+
+    #[test]
+    fn test_wgpu_model_forward_pass() {
+        let device = WgpuDevice::default();
+        let model = FeedForward::<B>::new(&device, 4, 8, 2, 3);
+
+        let input = Tensor::<B, 3>::zeros([2, 3, 4], &device);
+        let output = model.forward(input);
+
+        assert_eq!(output.dims(), [2, 2]);
+    }
+
+    #[test]
+    fn test_wgpu_training_epoch() {
+        let device = WgpuDevice::default();
+        let model = FeedForward::<B>::new(&device, 3, 8, 1, 2);
+
+        let items = make_items(4, 2, 3, 1);
+        let dataset = VecDataset { items };
+
+        let batcher = SequenceBatcher::<B>::new();
+        let mut optimizer = AdamConfig::new().init();
+
+        let (_updated_model, train_loss) = run_training_epoch::<B, _, _>(
+            &dataset,
+            &batcher,
+            &device,
+            model,
+            &mut optimizer,
+            2,    // batch_size
+            1e-3, // learning_rate
+        );
+
+        // Verify training produces finite loss
+        assert!(train_loss.is_finite(), "Training loss should be finite");
+        assert!(train_loss >= 0.0, "Training loss should be non-negative");
+    }
+
+    #[test]
+    fn test_wgpu_validation_epoch() {
+        let device = WgpuDevice::default();
+        let model = FeedForward::<Wgpu>::new(&device, 3, 8, 1, 2);
+
+        let items = make_items(2, 2, 3, 1);
+        let dataset = VecDataset { items };
+
+        let batcher = SequenceBatcher::<Wgpu>::new();
+
+        let valid_loss = run_validation_epoch::<Wgpu, _>(
+            &dataset,
+            &batcher,
+            &device,
+            &model,
+            2, // batch_size
+        );
+
+        // Verify validation produces finite loss
+        assert!(valid_loss.is_finite(), "Validation loss should be finite");
+        assert!(valid_loss >= 0.0, "Validation loss should be non-negative");
     }
 }

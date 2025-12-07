@@ -131,7 +131,7 @@ impl<B: Backend> SequenceModel<B> for SimpleLstm<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::backend::ndarray::NdArray;
+    use burn_ndarray::NdArray;
 
     type B = NdArray;
 

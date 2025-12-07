@@ -73,7 +73,7 @@ impl<B: Backend> Batcher<B, SequenceDatasetItem, SequenceBatch<B>> for SequenceB
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::backend::ndarray::NdArray;
+    use burn_ndarray::NdArray;
 
     type B = NdArray;
 

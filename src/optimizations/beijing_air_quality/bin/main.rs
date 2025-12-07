@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use fx_durable_ga_app::core::dataset::ManySequencesAdapter;
 use fx_durable_ga_app::core::ingestion::Extract;
 use fx_durable_ga_app::core::model::{FeedForward, SequenceModel};
@@ -101,8 +103,9 @@ async fn train(
     training: &ManySequencesAdapter,
     validation: &ManySequencesAdapter,
 ) -> anyhow::Result<Response> {
-    type Backend = burn::backend::Autodiff<burn::backend::NdArray>;
-    let device = burn::backend::ndarray::NdArrayDevice::default();
+    use fx_durable_ga_app::backend::{Backend, default_device};
+
+    let device = default_device();
 
     let model = FeedForward::<Backend>::new(
         &device,
