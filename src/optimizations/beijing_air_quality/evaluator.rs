@@ -138,8 +138,13 @@ impl Evaluator<BeijingPhenotype> for BeijingEvaluator {
                     EvaluationError::WorkerFailed(format!("Failed to wait for binary: {}", e))
                 })?;
 
+                // Always log stderr from training binary (contains device info)
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stderr.is_empty() {
+                    tracing::info!("Training binary stderr:\n{}", stderr);
+                }
+
                 if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
                     return Err(EvaluationError::WorkerFailed(format!(
                         "Binary failed with status {}: {}",
                         output.status, stderr
