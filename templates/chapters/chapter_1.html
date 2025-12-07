@@ -39,15 +39,15 @@
             and for which use-case? The list goes on.
         </p>
         <p>
-            From memory, most examples or articles I've seen about machine
-            learning (though I must admit I really haven't done my homework
-            here) typically involve an enthusiastic author reasoning about the
-            validity and meaning of parameters while making one-off experiments.
-            That makes me itch. If there's any equivalent to "code smell" for
-            data science, I think that's it—you've got these sophisticated
-            models producing measurable predictions, and yet you allow your
-            human superstition and poor analytical skills to dictate the
-            conditions of your experiments. I can't but ask "why?".
+            From memory, most examples or articles I've seen in the past about
+            machine learning (though I must admit I really haven't done my
+            homework here) typically involve an enthusiastic author reasoning
+            about the validity and meaning of parameters while making one-off
+            experiments. That makes me itch. If there's anything equivalent to
+            "code smell" for data science, I think that's it—you've got these
+            sophisticated models producing measurable predictions, and yet you
+            allow your human superstition and poor analytical skills to dictate
+            the conditions of your experiments. I can't but ask "why?".
         </p>
         <p>
             Consider a simple model, a feedforward neural network. Even this
@@ -140,26 +140,25 @@
         <h2>Making sense of the mess</h2>
         <p>
             In a previous job of mine, I worked in an innovation hub at one of
-            the largest architectural firms in Sweden. My role at the time, was
+            the largest architectural firms in Sweden. My role at the time was
             as computational designer, an odd term that often provided people
             with more questions than answers. As a job title it was not ideal,
-            but it was an interesting job. It involved applying programmatic
-            methods for exploring and manufacturing complex three dimensional
-            forms. The tool I used allowed for geometric optimization by means
-            of a built in genetic algorithm solver. Genetic algorithms (GA) is
-            an idea that takes its inspiration from Darwinian evolution theory
-            and employs operations such as "mutation" and "crossover" on
-            candidate solutions, hypothesizing that two fit solutions are likely
-            to have fit offspring. As it turns out GA is also a commonly used
-            tool for optimizing machine learning training parameters, model
-            architectures and for feature selection.
+            but it was an interesting job. It involved applying programming,
+            algorithms and systems thinking to the processes of creative
+            exploration and manufacturing of complex three dimensional forms.
+            The tool I used allowed for geometric optimization by means of a
+            built in genetic algorithm solver. Genetic algorithms (GA) is an
+            idea that takes its inspiration from Darwinian evolution theory and
+            employs operations such as "mutation" and "crossover" to find good
+            candidate solutions. The hypothesis is that two fit solutions are
+            likely to have fit offspring. As it turns out GA is also a commonly
+            used tool for optimizing machine learning systems.
         </p>
         <p>
-            A few weeks back and with all of the above in mind I wrote a simple
-            event driven GA library with Postgres persistence for Rust. I will
-            not be going in to the technical details of the library here as this
-            chapter is about putting to the test. However, I welcome you to
-            check it out, should you be interested:
+            A few weeks back, and with all of the above in mind, I wrote a
+            simple event driven GA library with Postgres persistence for Rust. I
+            will not be going in to the technical details of it now, however I
+            welcome you to check it out, should you be interested:
         </p>
         <a href="https://github.com/jakob-lilliemarck/fx-durable-ga"
             >https://github.com/jakob-lilliemarck/fx-durable-ga
@@ -171,17 +170,20 @@
             training parameters combined?
         </blockquote>
         <p>
-            Searching for a good solution across all of those, is after all the
-            reality of training just about any model on any dataset, and surely
-            that's a space is bound to be so large that its impractical,
-            improbable and perhaps even impossible, for any manual process to
-            find a global optimum, or even a good local one. In search of an
-            answer to my question I set up a project to attempt a combined
-            search for predictive ability using the "Beijing Multi-Site Air
-            Quality" dataset (Chen, 2017) while making use of my new library
-            <a href="https://github.com/jakob-lilliemarck/fx-durable-ga">
-                fx-durable-ga </a
-            >. You can find the project here:
+            Searching for a good solution across all of those is after all the
+            reality of training just about any model, on any dataset. Surely
+            that space is bound to be so large that it's impractical, improbable
+            and perhaps even impossible, for any manual process to find a global
+            optimum, or even a good local one. As a developer I've come to know
+            my human weaknesses well enough that I do not want to pick those
+            parameters by hand, but perhaps more importantly: I do not care
+            about the parameters, I care about the result.
+        </p>
+        <p>
+            In search of an answer to my question I set up a project to attempt
+            a combined search for predictive ability using the "Beijing
+            Multi-Site Air Quality" dataset (Chen, 2017) while making use of my
+            new library:
         </p>
         <a href="https://github.com/jakob-lilliemarck/fx-fitness-search"
             >https://github.com/jakob-lilliemarck/fx-fitness-search
@@ -191,21 +193,24 @@
     <section>
         <h2>Genetic encoding and fitness</h2>
         <p>
-            So how does one connect a genetic algorithm to a research question,
-            and get it to search and find candidate solutions? Lets for a moment
-            consider a much smaller and much simpler search space to illustrate
-            this process.
+            So how does one get a genetic algorithm to explore a landscape
+            solutions?
         </p>
         <p>
-            Lets imagine that we're searching for a point <var>A</var> within a
-            cube. The cube can be represented using the cartesian coordinate
-            system, within which it occupies some space along each of the three
-            axis <var>X</var>, <var>Y</var> and <var>Z</var>. The geometric
-            bounds of the cube could be defined as a maximum and a minimum value
-            along each axis. For simplicities sake, let's say the cube occupies
-            the space between the point <code>[0.0, 0.0, 0.0]</code> and
-            <code>[1.0, 1.0, 1.0]</code>, the full cube could then be described
-            as the following:
+            In an attempt to shed some light, lets for a moment consider a much
+            smaller and much simpler problem. Let's imagine that we're searching
+            for a point <var>A</var> within a cube, and the closer we get to it,
+            the better is our solution.
+        </p>
+        <p>
+            We represent the cube using the cartesian coordinate system, within
+            which it occupies some space along each of the three axes
+            <var>X</var>, <var>Y</var> and <var>Z</var>. The geometric bounds of
+            the cube could be defined as a maximum and a minimum value along
+            each axis. For simplicities sake, let's say the cube occupies the
+            space between the origin point <code>[0.0, 0.0, 0.0]</code> and a
+            point <code>[1.0, 1.0, 1.0]</code>. The full cube could then be
+            represented as the following.
         </p>
         <pre><code class="language-javascript">// X, Y and Z axis
 [
@@ -214,38 +219,38 @@
   { min: 0.0, max: 1.0 }
 ]</code></pre>
         <p>
-            That now defines all valid candidate solutions, the infinite number
-            of points within the cube, and separates them from the much larger
-            infinite number of invalid solutions outside of the cube. As such,
-            the definition effectively captures the morphology of our candidate
-            solution, the space we're searching within.
+            Knowing that we're searching for a point <i>within</i> the cube we
+            can now discard the infinite numbers of points that lie outside it,
+            and focus our attention to the much smaller infinite number of
+            points that lie within it. In other words, we know the valid range
+            of values for <var>X</var>, <var>Y</var> and <var>Z</var>, the
+            morphology of our search space.
         </p>
         <p>
-            We could then say that the fittest candidate solution (a point) will
-            be at zero distance from <code>A</code>, the point we're search for.
-            To compute the fitness of a candidate, we measure its distance to
-            <code>A</code>. Points closer to <code>A</code> will have a lower
-            fitness, while points further a away will have a higher fitness
-            value - our optimization will strive to minimize fitness.
+            To compute the <i>fitness</i> of a candidate, we measure its
+            distance to point <code>A</code>. Points closer to
+            <code>A</code> will have a lower fitness, while points further a
+            away will have a higher fitness. Our optimization will strive to
+            minimize fitness.
         </p>
         <p>
             Now we mostly have what we need to generate candidate solutions. For
             reasons beyond this example, the framework I've written requires
             genes to be integers, so in order to adapt this example and adhere
-            to those requirements we'll need to also define the number of steps,
-            the resolution, along each axis. In other words we'll need to
-            discretize the space. Discretizing the search space also limits it
-            to a finite number of solutions and makes the resolution explicit.
+            to those requirements we'll also need to define the number of steps,
+            the resolution, along each axis. That limits the search space
+            further and makes the resolution explicit.
         </p>
         <p>
-            Every valid point along an axis
+            Every valid point along an axis like
             <code>{ min: 0.0, max: 1.0, steps: 11 }</code>
             could then be described as one of the 11 integer numbers between 0
             and 10. We now possess the means of encoding and decoding a point
             through the morphological bounds of the cube. We call the decoded
-            form the phenotype, a term from genetics encompassing the observable
-            traits of an organism, and the encoded form the genotype, the
-            genetic information of that organism. To give an example:
+            form the <i>phenotype</i>, a term from genetics encompassing the
+            observable traits of an organism, and the encoded form the
+            <i>genotype</i>, the genetic information of that organism. To give
+            an example:
         </p>
         <pre><code class="language-javascript">// Morphology, the space we search solutions within
 [
@@ -274,76 +279,70 @@
             together allows for expressing most conceivable search spaces while
             allowing the framework to handle any gene of any search space in a
             uniform manner. Using the morphological definition, the GA framework
-            can now generate, breed and mutate genomes as well as evaluating
-            their fitness. That is the basics of a genetic algorithm
-            optimization solver.
+            can now <code>generate</code>, <code>breed</code>,
+            <code>mutate</code> and <code>evaluate</code> phenotypes. That is
+            the foundation of a GA optimization solver.
         </p>
     </section>
 
     <section>
         <h2>Putting it in context</h2>
-        <p>Returning to the hypothesis:</p>
-        <blockquote>
-            Could genetic algorithms be a way to search for "predictive ability"
-            over feature selection, preprocessing, model architecture and
-            training parameters combined?
-        </blockquote>
         <p>
-            Looking at the dataset, and considering this question I drew a few
-            conclusions:
+            Looking at the dataset and considering my question I drew three
+            conclusions.
+        </p>
+        <p class="conclusion">
+            I do not know which data points have a strong or weak correlation
+            and which would provide valuable information and which would just
+            provide noise. Therefore I want the system to freely be able to
+            select an arbitrary number of data points from the input dataset.
+        </p>
+        <p class="conclusion">
+            I can not determine which preprocessing methods are suitable to
+            extract information from which data points. Therefore I want the
+            system to freely be able to select up to a predefined number of
+            preprocessing methods for each data point.
+        </p>
+        <p class="conclusion">
+            The relationships between the selection of data points,
+            preprocessors, training parameters and model architecture may hold
+            valuable synergies. Any attempt at a stepwise optimization, for
+            example first optimizing model architecture, and then optimizing
+            training parameters, will hide these synergies from the system.
+            Therefore I want to optimize them all at once, in a
+            <i>combined</i> search for fitness.
+        </p>
+        <p>
+            But representing optional values within our GA poses a new challenge
+            as the genotype encoding relies on the position of genes. So how to
+            represent those "arbitrary number of" or "up to" expressions?
+        </p>
+        <p>
+            What if we used 2 genes to "wrap" the genes encoding a specific
+            attribute? Something like:
         </p>
         <ul>
             <li>
-                I wanted the algorithm to freely be able to select an arbitrary
-                number of data points from the input dataset, optimizing feature
-                selection.
+                One gene bounded at 0 and 1 with 2 steps, encoding if the
+                wrapped "block" is active or not.
             </li>
             <li>
-                I wanted the algorithm to freely be able to select up to a
-                predefined number of preprocessing methods for each data point,
-                optimizing feature engineering.
-            </li>
-            <li>
-                I wanted to optimize model architecture and training parameters
-                together with with feature selection and feature engineering.
+                One gene bounded between 0 and the number of options (column
+                names, preprocessor types, etc.), acting like a "selector".
             </li>
         </ul>
-            <p>
-                The idea is simple. Only some combinations of features and
-                preprocessor will provide the training loop with good learnable
-                patterns while most will just be noise. But representing
-                optional values within our GA poses a new challenge as the
-                genotype encoding relies on the position of genes. So how to
-                represent those "arbitrary number of" or "up to" expressions?
-            </p>
-            <p>
-                What if we used 2 genes to "wrap" the genes encoding a specific
-                attribute? Something like:
-            </p>
-            <ul>
-                <li>
-                    One gene bounded at 0 and 1 with 2 steps, encoding if the
-                    wrapped "block" is active or not.
-                </li>
-                <li>
-                    One gene bounded between 0 and the number of options (column
-                    names, preprocessor types, etc.), acting like a "selector".
-                </li>
-            </ul>
-<pre><code class="language-javascript">[
+        <pre><code class="language-javascript">[
     // The on/off "block toggle"
     { min: 0.0, max: 1.0, steps: 2 },
     // The "column selector", there are 12 columns of interest
     { min: 0.0, max: 11.0, steps: 12 },
     // .. the wrapped gene(s) follow here
 ]</code></pre>
-            <p>
-                This design comes with the constraint that the wrapped genes
-                must be of equal length and must share the same number of
-                options per gene. While it didn't feel ideal, I decided it was
-                good enough for now.
-            </p>
-        </ul>
+        <p>
+            This design comes with the constraint that the wrapped genes must be
+            of equal length and must share the same number of options per gene.
+            While it didn't feel ideal, I decided it was good enough for now.
+        </p>
     </section>
     <section>
         <h2>The experiment</h2>
