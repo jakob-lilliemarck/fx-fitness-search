@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: postgres.Dockerfile
     container_name: fx-durable-ga-db
+    restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
@@ -22,7 +23,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
   migrate:
     image: debian:bookworm-slim
@@ -51,6 +51,7 @@ services:
   metabase:
     image: metabase/metabase:latest
     container_name: fx-durable-ga-metabase
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,11 +66,47 @@ services:
       - "3000:3000"
     networks:
       - default
-    restart: unless-stopped
+
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: always
+    environment:
+      # --- REPLACE THESE PLACEHOLDERS ---
+      - WG_HOST=${HOST_IP:?error}
+      - PASSWORD_HASH=${PASSWORD_HASH:?error}
+      - WG_UI_LISTEN_ADDR=127.0.0.1:51821
+      - TZ=Europe/Stockholm
+      # ----------------------------------
+      - WG_PORT=51820
+    volumes:
+      # This creates a 'config' subdirectory where your compose file is located
+      - ./wireguard_config:/etc/wireguard
+    ports:
+      # Exposes ONLY the VPN tunnel port (UDP) publicly
+      - "51820:51820/udp"
+      # Exposes the Web UI port (TCP) ONLY on the Host VM's localhost (127.0.0.1)
+      - "127.0.0.1:51821:51821/tcp"
+    cap_add:
+      # CRITICAL: Grants the permissions needed to manage network interfaces
+      - NET_ADMIN
+      - SYS_MODULE
+    networks:
+      - default
 
 networks:
   default:
     driver: bridge
+# Try this later:
+# networks:
+#   default:
+#     driver: bridge
+#     ipam:
+#       config:
+#         - subnet: 172.18.0.0/16
+#           gateway: 172.18.0.1
 
 volumes:
   postgres_data:
+  # Formal definition added here:
+  wireguard_config:

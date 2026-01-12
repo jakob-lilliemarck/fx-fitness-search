@@ -213,8 +213,8 @@
             asking myself the same question, but truth be told, I find neither
             of which compelling to work with. After all, in most systems (yes,
             even machine learning ones) the majority of the code is not about
-            tensors and models, but about data retrieval and preprocessing. If
-            you ask me, Rust has it all - excellent support for test driven
+            tensors and models, but about data retrieval and processing. If you
+            ask me, Rust has it all - excellent support for test driven
             development, memory safety, robust and explicit parallel computing
             and a proper expressive type system. I'd even argue that Rust is a
             simple language because in Rust there are no surprises and there is
@@ -246,8 +246,8 @@
             Consider a simple model, a feedforward neural network. Even this
             seemingly straightforward architecture exists within a vast space of
             design choices. To illustrate the scale of this space, its
-            "morphology" if you will, let me discretize the key dimensions that
-            impact model performance:
+            "morphology" if you will, lets roughly discretize the key dimensions
+            that impact model performance:
         </p>
         <table>
             <thead>
@@ -324,8 +324,8 @@
         <p>
             Even for a simple feedforward network, the morphological space is
             massive! Any approach relying on manual experimentation to search
-            such a vast space is at best going to be impractical - this is a
-            problem that calls for a structured quantitative approach.
+            such is going to be impractical at best - this is a problem that
+            calls for a structured quantitative approach.
         </p>
     </section>
 
@@ -333,19 +333,20 @@
         <h2>Making sense of the mess</h2>
         <p>
             In a previous job of mine, I worked in an innovation hub at one of
-            the largest architectural firms in Sweden. My role at the time was
-            as computational designer, an odd term that often provided people
-            with more questions than answers. As a job title it was not ideal,
-            but it was an interesting job. It involved applying programming,
-            algorithms and systems thinking to the processes of creative
-            exploration and manufacturing of complex three dimensional forms.
-            The tool I used allowed for geometric optimization by means of a
-            built in genetic algorithm solver. Genetic algorithms (GA) is an
-            idea that takes its inspiration from Darwinian evolution theory and
-            employs operations such as "mutation" and "crossover" to find good
-            candidate solutions. The hypothesis is that two fit solutions are
-            likely to have fit offspring. As it turns out GA is also a commonly
-            used tool for optimizing machine learning systems.
+            the larger architectural firms in Sweden. My role at the time was as
+            <i>computational designer</i>, an odd title that often provided
+            people with more questions than answers. As a title it was not
+            ideal, but it was an interesting job. It involved applying
+            programming, algorithms and systems thinking to the processes of
+            creative exploration and manufacturing of complex three dimensional
+            forms. The tool I used allowed for geometric optimization by means
+            of a built in genetic algorithm solver. Genetic algorithms (GA) is
+            an idea that takes its inspiration from Darwinian evolution theory
+            and employs operations such as "mutation" and "crossover" to find
+            good candidate solutions. The foundational hypothesis is that two
+            fit solutions are likely to have fit offspring. As it turns out GA
+            is also a commonly used tool for optimizing machine learning
+            systems.
         </p>
         <p>
             A few weeks back, and with all of the above in mind, I wrote a
@@ -370,7 +371,7 @@
             optimum, or even a good local one. As a developer I've come to know
             my human weaknesses well enough that I do not want to pick those
             parameters by hand, but perhaps more importantly: I do not care
-            about the parameters, I care about the result.
+            about the parameters, I care about the performance of the system!
         </p>
         <p>
             In search of an answer to my question I set up a project to attempt
@@ -386,14 +387,14 @@
     <section>
         <h2>Genetic encoding and fitness</h2>
         <p>
-            So how does one get a genetic algorithm to explore a landscape
+            So how does one get a genetic algorithm to explore a landscape of
             solutions?
         </p>
         <p>
             In an attempt to shed some light, lets for a moment consider a much
             smaller and much simpler problem. Let's imagine that we're searching
-            for a point <var>A</var> within a cube, and the closer we get to it,
-            the better is our solution.
+            for a point <var>A</var> within a cube. The closer we get to the
+            point, the better is our solution.
         </p>
         <p>
             We represent the cube using the cartesian coordinate system, within
@@ -415,9 +416,9 @@
             Knowing that we're searching for a point <i>within</i> the cube we
             can now discard the infinite numbers of points that lie outside it,
             and focus our attention to the much smaller infinite number of
-            points that lie within it. In other words, we know the valid range
-            of values for <var>X</var>, <var>Y</var> and <var>Z</var>, the
-            morphology of our search space.
+            points that lie within it. In other words, we know the valid ranges
+            of values for <var>X</var>, <var>Y</var> and <var>Z</var>, those
+            define the <i>morphology</i> of our search space.
         </p>
         <p>
             To compute the <i>fitness</i> of a candidate, we measure its
@@ -432,7 +433,8 @@
             genes to be integers, so in order to adapt this example and adhere
             to those requirements we'll also need to define the number of steps,
             the resolution, along each axis. That limits the search space
-            further and makes the resolution explicit.
+            further, makes the resolution explicit and the number of
+            configuration finite.
         </p>
         <p>
             Every valid point along an axis like
@@ -487,22 +489,23 @@
         <p class="conclusion">
             I do not know which data points have a strong or weak correlation
             and which would provide valuable information and which would just
-            provide noise. Therefore I want the system to freely be able to
-            select an arbitrary number of data points from the input dataset.
+            provide noise. Therefore I want the system to freely optimize the
+            selection of data points, to include an arbitrary number from those
+            available in the dataset.
         </p>
         <p class="conclusion">
             I can not determine which preprocessing methods are suitable to
             extract information from which data points. Therefore I want the
-            system to freely be able to select up to a predefined number of
-            preprocessing methods for each data point.
+            system to freely optimize the selection and preprocessing methods
+            and their parameters for each selected data point.
         </p>
         <p class="conclusion">
             The relationships between the selection of data points,
-            preprocessors, training parameters and model architecture may hold
-            valuable synergies. Any attempt at a stepwise optimization, for
-            example first optimizing model architecture, and then optimizing
-            training parameters, will hide these synergies from the system.
-            Therefore I want to optimize them all at once, in a
+            preprocessors, training parameters and model architecture may
+            contain valuable recognizable patterns. Any attempt at a stepwise
+            optimization, for example first optimizing model architecture, and
+            then optimizing training parameters, will hide these patterns from
+            the system. Therefore I want to optimize them all at once, in a
             <i>combined</i> search for fitness.
         </p>
         <p>
@@ -534,16 +537,50 @@
         <p>
             This design comes with the constraint that the wrapped genes must be
             of equal length and must share the same number of options per gene.
-            While it didn't feel ideal, I decided it was good enough for now.
+            While that's far from ideal I decided it was good enough for now.
         </p>
     </section>
     <section>
-        <h2>The experiment</h2>
-        <p>TBD</p>
-        <canvas id="chart-019af763-d48a-7f91-aff4-adf5d7f7f6a2"></canvas>
+        <h2>Putting it all together</h2>
+        <p>
+            So, does this complex and computationally expensive approach hold
+            any merit? Will it be able to find any promising configurations
+            within this immense search space?
+        </p>
+        <p>
+            I initiated an optimization using the command below, basing it on
+            some past experience that for a given number of evaluations, a
+            higher number of generations typically produce better results by
+            providing more exploitation.
+        </p>
+        <pre><code class="language-bash">target/release/client beijing request-optimization \
+  --fitness-goal 'MIN(0.0)' \
+  --schedule 'GENERATIONAL(100, 12)' \
+  --selector 'TOURNAMENT(3, 12)' \
+  --mutagen 'MUTAGEN(0.7, 0.4)' \
+  --initial-population 50 \
+  --prediction-horizon 1 \
+  --epochs 20 \
+  --patience 3 \
+  --validation-start-epoch 5 \
+  --batch-size 128</code></pre>
+        <p></p>
+        <canvas id="chart-019bb12d-dfdb-7292-92ba-8b5fceb06284"></canvas>
 <script>
-    new Chart(document.getElementById('chart-019af763-d48a-7f91-aff4-adf5d7f7f6a2'), {"type":"line","data":{"labels":["Gen 1","Gen 2","Gen 3","Gen 4","Gen 5","Gen 6","Gen 7","Gen 8","Gen 9","Gen 10","Gen 11","Gen 12","Gen 13","Gen 14","Gen 15","Gen 16","Gen 17","Gen 18","Gen 19","Gen 20","Gen 21","Gen 22","Gen 23","Gen 24","Gen 25","Gen 26","Gen 27","Gen 28","Gen 29","Gen 30","Gen 31","Gen 32","Gen 33","Gen 34","Gen 35","Gen 36","Gen 37","Gen 38","Gen 39","Gen 40","Gen 41","Gen 42","Gen 43","Gen 44","Gen 45","Gen 46","Gen 47","Gen 48","Gen 49","Gen 50","Gen 51","Gen 52","Gen 53","Gen 54","Gen 55","Gen 56","Gen 57","Gen 58","Gen 59","Gen 60","Gen 61","Gen 62","Gen 63","Gen 64","Gen 65","Gen 66"],"datasets":[{"label":"Average Fitness","data":[20.18,30.51,23.5,24.61,16.96,56.75,18.96,14.2,45.58,18.63,33.85,39.67,12.79,24.11,11.71,27.01,12.6,23.62,12.47,40.84,25.28,11.29,21.81,15.99,10.63,59.16,45.02,42.99,15.92,37.1,48.19,27.58,37.36,25.83,10.37,27.1,26.56,13.24,47.14,12.38,12.61,24.66,21.43,28.1,26.77,26.4,50.82,22.71,27.5,30.8,23.83,33.96,37.52,20.67,14.63,9.88,11.82,29.45,47.54,20.65,70.05,24.03,22.86,57.19,13.26,12.3],"borderColor":"rgb(75, 192, 192)","tension":0.1,"pointRadius":0.0,"borderWidth":1.5},{"label":"Trend: Average Fitness","data":[25.5265,25.576002,25.625504,25.675005,25.724506,25.77401,25.823511,25.873013,25.922514,25.972015,26.021517,26.071018,26.12052,26.170021,26.219522,26.269026,26.318527,26.368029,26.41753,26.467031,26.516533,26.566034,26.615536,26.665037,26.714539,26.764042,26.813543,26.863045,26.912546,26.962048,27.011549,27.06105,27.110552,27.160053,27.209557,27.259058,27.30856,27.35806,27.407562,27.457064,27.506565,27.556067,27.605568,27.655071,27.70457,27.754074,27.803576,27.853077,27.902578,27.95208,28.001581,28.051083,28.100584,28.150085,28.199589,28.24909,28.298592,28.348093,28.397594,28.447096,28.496597,28.546099,28.5956,28.645103,28.694605,28.744106],"borderColor":"rgb(255, 99, 132)","tension":0.0,"pointRadius":0.0,"borderWidth":1.0}]},"options":{"animation":false,"aspectRatio":1.7}});
+    new Chart(document.getElementById('chart-019bb12d-dfdb-7292-92ba-8b5fceb06284'), {"type":"line","data":{"labels":["Gen 1","Gen 2","Gen 3","Gen 4","Gen 5","Gen 6","Gen 7","Gen 8","Gen 9","Gen 10","Gen 11","Gen 12","Gen 13","Gen 14","Gen 15","Gen 16","Gen 17","Gen 18","Gen 19","Gen 20","Gen 21","Gen 22","Gen 23","Gen 24","Gen 25","Gen 26","Gen 27","Gen 28","Gen 29","Gen 30","Gen 31","Gen 32","Gen 33","Gen 34","Gen 35","Gen 36","Gen 37","Gen 38","Gen 39","Gen 40","Gen 41","Gen 42","Gen 43","Gen 44","Gen 45","Gen 46","Gen 47","Gen 48","Gen 49","Gen 50","Gen 51","Gen 52","Gen 53","Gen 54","Gen 55","Gen 56","Gen 57","Gen 58","Gen 59","Gen 60","Gen 61","Gen 62","Gen 63","Gen 64","Gen 65","Gen 66"],"datasets":[{"label":"Average Fitness","data":[20.18,30.51,23.5,24.61,16.96,56.75,18.96,14.2,45.58,18.63,33.85,39.67,12.79,24.11,11.71,27.01,12.6,23.62,12.47,40.84,25.28,11.29,21.81,15.99,10.63,59.16,45.02,42.99,15.92,37.1,48.19,27.58,37.36,25.83,10.37,27.1,26.56,13.24,47.14,12.38,12.61,24.66,21.43,28.1,26.77,26.4,50.82,22.71,27.5,30.8,23.83,33.96,37.52,20.67,14.63,9.88,11.82,29.45,47.54,20.65,70.05,24.03,22.86,57.19,13.26,12.3],"borderColor":"rgb(75, 192, 192)","tension":0.1,"pointRadius":0.0,"borderWidth":1.5},{"label":"Trend: Average Fitness","data":[25.5265,25.576002,25.625504,25.675005,25.724506,25.77401,25.823511,25.873013,25.922514,25.972015,26.021517,26.071018,26.12052,26.170021,26.219522,26.269026,26.318527,26.368029,26.41753,26.467031,26.516533,26.566034,26.615536,26.665037,26.714539,26.764042,26.813543,26.863045,26.912546,26.962048,27.011549,27.06105,27.110552,27.160053,27.209557,27.259058,27.30856,27.35806,27.407562,27.457064,27.506565,27.556067,27.605568,27.655071,27.70457,27.754074,27.803576,27.853077,27.902578,27.95208,28.001581,28.051083,28.100584,28.150085,28.199589,28.24909,28.298592,28.348093,28.397594,28.447096,28.496597,28.546099,28.5956,28.645103,28.694605,28.744106],"borderColor":"rgb(255, 99, 132)","tension":0.0,"pointRadius":0.0,"borderWidth":1.0}]},"options":{"animation":false,"aspectRatio":1.7}});
 </script>
+        <p>TBD</p>
+        <pre><code class="language-bash">target/release/client beijing request-optimization \
+  --fitness-goal 'MIN(0.0)' \
+  --schedule 'GENERATIONAL(100, 48)' \
+  --selector 'TOURNAMENT(5, 400)' \
+  --mutagen 'MUTAGEN(0.3, 0.15)' \
+  --initial-population 200 \
+  --prediction-horizon 1 \
+  --epochs 30 \
+  --patience 3 \
+  --validation-start-epoch 5 \
+  --batch-size 128</code></pre>
         <p>TBD</p>
     </section>
 </article>
