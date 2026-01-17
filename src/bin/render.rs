@@ -115,9 +115,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Render and save
-    let book_dir = manifest_dir.join("book");
     let rendered_html = chapter.render()?;
-    let output_path = book_dir.join("chapter-1.html");
+    let output_path = manifest_dir.join("index.html");
     std::fs::write(&output_path, rendered_html)?;
 
     println!("Generated: {}", output_path.display());
