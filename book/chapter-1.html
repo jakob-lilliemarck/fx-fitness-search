@@ -541,11 +541,11 @@
         </p>
     </section>
     <section>
-        <h2>Putting it all together</h2>
+        <h2>Trying it out</h2>
         <p>
             So, does this complex and computationally expensive approach hold
             any merit? Will it be able to find any promising configurations
-            within this immense search space?
+            within these immense search spaces?
         </p>
         <p>
             I initiated an optimization using the command below, basing it on
@@ -564,12 +564,53 @@
   --patience 3 \
   --validation-start-epoch 5 \
   --batch-size 128</code></pre>
-        <p></p>
-        <canvas id="chart-019bb12d-dfdb-7292-92ba-8b5fceb06284"></canvas>
+        <p>
+            To spell it out, this command requests an optimization that
+            minimizes fitness across 100 generations of population size 12. It
+            selects parents via tournament selection, sampling 12 genotypes and
+            running a tournament of size 3 to select each parent.
+            <code>MUTAGEN(0.7, 0.4)</code> sets temperature at 0.7, allowing for
+            large changes in the mutation of a single gene (max is at 1.0),
+            while a mutation rate of 0.4 gives each gene a 40% chance of
+            mutating. The optimization starts with an initial population of 50
+            genotypes and trains each candidate model for up to 20 epochs with a
+            batch size of 128, stopping early if validation loss fails to
+            improve for 3 consecutive epochs (starting from epoch 5). The
+            prediction horizon of 1 means the model forecasts one time step
+            ahead.
+        </p>
+        <canvas id="chart-019bcca7-2a19-7cf2-861f-ccbbfe7bfb78"></canvas>
 <script>
-    new Chart(document.getElementById('chart-019bb12d-dfdb-7292-92ba-8b5fceb06284'), {"type":"line","data":{"labels":["Gen 1","Gen 2","Gen 3","Gen 4","Gen 5","Gen 6","Gen 7","Gen 8","Gen 9","Gen 10","Gen 11","Gen 12","Gen 13","Gen 14","Gen 15","Gen 16","Gen 17","Gen 18","Gen 19","Gen 20","Gen 21","Gen 22","Gen 23","Gen 24","Gen 25","Gen 26","Gen 27","Gen 28","Gen 29","Gen 30","Gen 31","Gen 32","Gen 33","Gen 34","Gen 35","Gen 36","Gen 37","Gen 38","Gen 39","Gen 40","Gen 41","Gen 42","Gen 43","Gen 44","Gen 45","Gen 46","Gen 47","Gen 48","Gen 49","Gen 50","Gen 51","Gen 52","Gen 53","Gen 54","Gen 55","Gen 56","Gen 57","Gen 58","Gen 59","Gen 60","Gen 61","Gen 62","Gen 63","Gen 64","Gen 65","Gen 66"],"datasets":[{"label":"Average Fitness","data":[20.18,30.51,23.5,24.61,16.96,56.75,18.96,14.2,45.58,18.63,33.85,39.67,12.79,24.11,11.71,27.01,12.6,23.62,12.47,40.84,25.28,11.29,21.81,15.99,10.63,59.16,45.02,42.99,15.92,37.1,48.19,27.58,37.36,25.83,10.37,27.1,26.56,13.24,47.14,12.38,12.61,24.66,21.43,28.1,26.77,26.4,50.82,22.71,27.5,30.8,23.83,33.96,37.52,20.67,14.63,9.88,11.82,29.45,47.54,20.65,70.05,24.03,22.86,57.19,13.26,12.3],"borderColor":"rgb(75, 192, 192)","tension":0.1,"pointRadius":0.0,"borderWidth":1.5},{"label":"Trend: Average Fitness","data":[25.5265,25.576002,25.625504,25.675005,25.724506,25.77401,25.823511,25.873013,25.922514,25.972015,26.021517,26.071018,26.12052,26.170021,26.219522,26.269026,26.318527,26.368029,26.41753,26.467031,26.516533,26.566034,26.615536,26.665037,26.714539,26.764042,26.813543,26.863045,26.912546,26.962048,27.011549,27.06105,27.110552,27.160053,27.209557,27.259058,27.30856,27.35806,27.407562,27.457064,27.506565,27.556067,27.605568,27.655071,27.70457,27.754074,27.803576,27.853077,27.902578,27.95208,28.001581,28.051083,28.100584,28.150085,28.199589,28.24909,28.298592,28.348093,28.397594,28.447096,28.496597,28.546099,28.5956,28.645103,28.694605,28.744106],"borderColor":"rgb(255, 99, 132)","tension":0.0,"pointRadius":0.0,"borderWidth":1.0}]},"options":{"animation":false,"aspectRatio":1.7}});
+    new Chart(document.getElementById('chart-019bcca7-2a19-7cf2-861f-ccbbfe7bfb78'), {"type":"line","data":{"labels":["Gen 1","Gen 2","Gen 3","Gen 4","Gen 5","Gen 6","Gen 7","Gen 8","Gen 9","Gen 10","Gen 11","Gen 12","Gen 13","Gen 14","Gen 15","Gen 16","Gen 17","Gen 18","Gen 19","Gen 20","Gen 21","Gen 22","Gen 23","Gen 24","Gen 25","Gen 26","Gen 27","Gen 28","Gen 29","Gen 30","Gen 31","Gen 32","Gen 33","Gen 34","Gen 35","Gen 36","Gen 37","Gen 38","Gen 39","Gen 40","Gen 41","Gen 42","Gen 43","Gen 44","Gen 45","Gen 46","Gen 47","Gen 48","Gen 49","Gen 50","Gen 51","Gen 52","Gen 53","Gen 54","Gen 55","Gen 56","Gen 57","Gen 58","Gen 59","Gen 60","Gen 61","Gen 62","Gen 63","Gen 64","Gen 65","Gen 66"],"datasets":[{"label":"Average Fitness","data":[20.18,30.51,23.5,24.61,16.96,56.75,18.96,14.2,45.58,18.63,33.85,39.67,12.79,24.11,11.71,27.01,12.6,23.62,12.47,40.84,25.28,11.29,21.81,15.99,10.63,59.16,45.02,42.99,15.92,37.1,48.19,27.58,37.36,25.83,10.37,27.1,26.56,13.24,47.14,12.38,12.61,24.66,21.43,28.1,26.77,26.4,50.82,22.71,27.5,30.8,23.83,33.96,37.52,20.67,14.63,9.88,11.82,29.45,47.54,20.65,70.05,24.03,22.86,57.19,13.26,12.3],"borderColor":"rgb(75, 192, 192)","tension":0.1,"pointRadius":0.0,"borderWidth":1.5},{"label":"Trend: Average Fitness","data":[25.5265,25.576002,25.625504,25.675005,25.724506,25.77401,25.823511,25.873013,25.922514,25.972015,26.021517,26.071018,26.12052,26.170021,26.219522,26.269026,26.318527,26.368029,26.41753,26.467031,26.516533,26.566034,26.615536,26.665037,26.714539,26.764042,26.813543,26.863045,26.912546,26.962048,27.011549,27.06105,27.110552,27.160053,27.209557,27.259058,27.30856,27.35806,27.407562,27.457064,27.506565,27.556067,27.605568,27.655071,27.70457,27.754074,27.803576,27.853077,27.902578,27.95208,28.001581,28.051083,28.100584,28.150085,28.199589,28.24909,28.298592,28.348093,28.397594,28.447096,28.496597,28.546099,28.5956,28.645103,28.694605,28.744106],"borderColor":"rgb(255, 99, 132)","tension":0.0,"pointRadius":0.0,"borderWidth":1.0}]},"options":{"animation":false,"aspectRatio":1.7}});
 </script>
-        <p>TBD</p>
+        <p>
+            This graph shows the resulting <i>average fitness</i> per generation
+            after running the above command for about 65 generations, after
+            which I saw no point in keeping it running. While it did indeed find
+            some decent configurations there were no signs that the system could
+            effectively exploit the solutions it had found to produce better
+            ones. In fact, it did not really seem any better than a random
+            search!
+        </p>
+        <p>
+            It was a disappointing result but I wasn't expecting success to come
+            cheaply. Perhaps my optimization settings were too geared towards
+            <i>exploration</i> and too little towards <i>exploitation</i>? The
+            relationship between the two is typically a fickle thing with GAs,
+            and while I did get the feeling my work was just moving the buttons
+            and levers one step further from the actual problem, I tried to
+            ignore it for the time being. I needed more tests, more results!
+        </p>
+    </section>
+    <section>
+        <h2>Trying again</h2>
+        <p>
+            I re-wrote the project into a client-server architecture, rented a
+            cheap VM to run a database and configured SSH access between my
+            devices and the server. My devices could now cooperatively work on
+            the same optimization request to resolve it faster and at larger
+            scale than before. With that setup I ran the following command.
+        </p>
         <pre><code class="language-bash">target/release/client beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
   --schedule 'GENERATIONAL(100, 48)' \
@@ -581,7 +622,20 @@
   --patience 3 \
   --validation-start-epoch 5 \
   --batch-size 128</code></pre>
-        <p>TBD</p>
+        <p>
+            This request uses larger populations, larger tournament and sample
+            sizes, lower temperature and mutation rate as well as a much larger
+            initial population to put significant more emphasis on exploitation.
+        </p>
+        <canvas id="chart-019bcca7-2a19-7cf2-861f-ccc65f88dd6c"></canvas>
+<script>
+    new Chart(document.getElementById('chart-019bcca7-2a19-7cf2-861f-ccc65f88dd6c'), {"type":"line","data":{"labels":["Gen 1","Gen 2","Gen 3","Gen 4","Gen 5","Gen 6","Gen 7","Gen 8","Gen 9","Gen 10","Gen 11","Gen 12","Gen 13","Gen 14","Gen 15","Gen 16","Gen 17","Gen 18","Gen 19","Gen 20","Gen 21","Gen 22","Gen 23","Gen 24","Gen 25","Gen 26","Gen 27","Gen 28","Gen 29","Gen 30","Gen 31","Gen 32","Gen 33","Gen 34","Gen 35","Gen 36","Gen 37","Gen 38","Gen 39","Gen 40","Gen 41","Gen 42","Gen 43","Gen 44","Gen 45","Gen 46","Gen 47","Gen 48","Gen 49","Gen 50","Gen 51","Gen 52","Gen 53","Gen 54","Gen 55","Gen 56","Gen 57","Gen 58","Gen 59","Gen 60","Gen 61","Gen 62","Gen 63","Gen 64","Gen 65","Gen 66","Gen 67","Gen 68","Gen 69","Gen 70","Gen 71","Gen 72","Gen 73","Gen 74","Gen 75","Gen 76","Gen 77","Gen 78","Gen 79","Gen 80","Gen 81","Gen 82","Gen 83","Gen 84","Gen 85","Gen 86","Gen 87","Gen 88","Gen 89","Gen 90","Gen 91","Gen 92","Gen 93","Gen 94","Gen 95","Gen 96","Gen 97"],"datasets":[{"label":"Average Fitness","data":[30.48,17.54,13.58,14.51,10.99,15.29,9.43,13.49,16.29,9.1,10.31,14.94,4.9,18.69,13.46,4.16,15.22,11.45,10.24,4.43,9.98,5.96,13.82,9.2,7.18,11.89,10.35,11.03,7.33,3.68,10.45,7.01,13.08,11.26,7.94,12.2,11.22,9.18,11.51,6.13,7.97,8.62,4.16,11.22,3.61,5.02,8.44,4.14,7.11,2.41,7.3,3.63,6.44,9.74,6.67,6.34,11.32,9.69,9.56,9.29,10.76,4.05,6.7,6.37,9.36,8.0,8.9,4.05,7.54,9.08,17.78,7.25,11.4,5.07,11.8,3.9,7.78,7.71,7.43,7.36,4.16,8.41,6.8,3.25,6.12,6.7,8.67,10.44,11.31,6.5,4.85,5.87,8.35,7.16,3.36,12.16,7.21],"borderColor":"rgb(75, 192, 192)","tension":0.1,"pointRadius":0.0,"borderWidth":1.5},{"label":"Trend: Average Fitness","data":[12.253994,12.186673,12.119351,12.052031,11.98471,11.917388,11.850067,11.782745,11.715425,11.648104,11.580782,11.513461,11.44614,11.3788185,11.311498,11.244177,11.176855,11.109534,11.0422125,10.974892,10.907571,10.840249,10.772928,10.705606,10.638286,10.570965,10.503643,10.436322,10.369001,10.30168,10.234359,10.167038,10.099716,10.032395,9.965075,9.897753,9.830432,9.763111,9.695789,9.6284685,9.561147,9.493826,9.426504,9.359183,9.2918625,9.224541,9.15722,9.089899,9.022577,8.955256,8.887936,8.820614,8.753293,8.685972,8.61865,8.55133,8.484009,8.416687,8.349366,8.282044,8.214724,8.147402,8.080081,8.01276,7.945439,7.8781176,7.8107967,7.7434754,7.676154,7.608833,7.541512,7.4741907,7.4068694,7.339548,7.2722273,7.204906,7.1375847,7.0702634,7.0029426,6.9356213,6.8683,6.800979,6.733658,6.6663365,6.599015,6.5316944,6.464373,6.397052,6.3297305,6.2624097,6.1950884,6.127767,6.060446,5.993125,5.9258037,5.8584824,5.7911615],"borderColor":"rgb(255, 99, 132)","tension":0.0,"pointRadius":0.0,"borderWidth":1.0}]},"options":{"animation":false,"aspectRatio":1.7}});
+</script>
+        <p>
+            Look at that! Average fitness is actually decreasing, at least for
+            the 50 first generations or so. This time around the GA undoubtedly
+            found patterns it could exploit.
+        </p>
     </section>
 </article>
 

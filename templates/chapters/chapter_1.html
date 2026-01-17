@@ -348,11 +348,11 @@
         </p>
     </section>
     <section>
-        <h2>Putting it all together</h2>
+        <h2>Trying it out</h2>
         <p>
             So, does this complex and computationally expensive approach hold
             any merit? Will it be able to find any promising configurations
-            within this immense search space?
+            within these immense search spaces?
         </p>
         <p>
             I initiated an optimization using the command below, basing it on
@@ -371,9 +371,50 @@
   --patience 3 \
   --validation-start-epoch 5 \
   --batch-size 128</code></pre>
-        <p></p>
-        {{ chart_html|safe }}
-        <p>TBD</p>
+        <p>
+            To spell it out, this command requests an optimization that
+            minimizes fitness across 100 generations of population size 12. It
+            selects parents via tournament selection, sampling 12 genotypes and
+            running a tournament of size 3 to select each parent.
+            <code>MUTAGEN(0.7, 0.4)</code> sets temperature at 0.7, allowing for
+            large changes in the mutation of a single gene (max is at 1.0),
+            while a mutation rate of 0.4 gives each gene a 40% chance of
+            mutating. The optimization starts with an initial population of 50
+            genotypes and trains each candidate model for up to 20 epochs with a
+            batch size of 128, stopping early if validation loss fails to
+            improve for 3 consecutive epochs (starting from epoch 5). The
+            prediction horizon of 1 means the model forecasts one time step
+            ahead.
+        </p>
+        {{ chart_1_html|safe }}
+        <p>
+            This graph shows the resulting <i>average fitness</i> per generation
+            after running the above command for about 65 generations, after
+            which I saw no point in keeping it running. While it did indeed find
+            some decent configurations there were no signs that the system could
+            effectively exploit the solutions it had found to produce better
+            ones. In fact, it did not really seem any better than a random
+            search!
+        </p>
+        <p>
+            It was a disappointing result but I wasn't expecting success to come
+            cheaply. Perhaps my optimization settings were too geared towards
+            <i>exploration</i> and too little towards <i>exploitation</i>? The
+            relationship between the two is typically a fickle thing with GAs,
+            and while I did get the feeling my work was just moving the buttons
+            and levers one step further from the actual problem, I tried to
+            ignore it for the time being. I needed more tests, more results!
+        </p>
+    </section>
+    <section>
+        <h2>Trying again</h2>
+        <p>
+            I re-wrote the project into a client-server architecture, rented a
+            cheap VM to run a database and configured SSH access between my
+            devices and the server. My devices could now cooperatively work on
+            the same optimization request to resolve it faster and at larger
+            scale than before. With that setup I ran the following command.
+        </p>
         <pre><code class="language-bash">target/release/client beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
   --schedule 'GENERATIONAL(100, 48)' \
@@ -385,7 +426,17 @@
   --patience 3 \
   --validation-start-epoch 5 \
   --batch-size 128</code></pre>
-        <p>TBD</p>
+        <p>
+            This request uses larger populations, larger tournament and sample
+            sizes, lower temperature and mutation rate as well as a much larger
+            initial population to put significant more emphasis on exploitation.
+        </p>
+        {{ chart_2_html|safe }}
+        <p>
+            Look at that! Average fitness is actually decreasing, at least for
+            the 50 first generations or so. This time around the GA undoubtedly
+            found patterns it could exploit.
+        </p>
     </section>
 </article>
 {% endblock %}

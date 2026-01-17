@@ -8,7 +8,8 @@ pub struct Chapter1 {
     pub author: String,
     pub date: NaiveDate,
     pub base_url: String,
-    pub chart_html: String,
+    pub chart_1_html: String,
+    pub chart_2_html: String,
 }
 
 impl Chapter1 {

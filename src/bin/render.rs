@@ -8,7 +8,11 @@ use uuid::Uuid;
 
 const AUTHOR: &str = "Jakob Lilliemarck";
 
-fn load_csv(csv_path: &PathBuf) -> Result<LineChartData, Box<dyn std::error::Error>> {
+fn load_csv(
+    csv_path: &PathBuf,
+    x_idx: usize,
+    y_idx: usize,
+) -> Result<LineChartData, Box<dyn std::error::Error>> {
     let mut reader = ReaderBuilder::new().has_headers(true).from_path(csv_path)?;
 
     let mut labels = Vec::new();
@@ -18,12 +22,12 @@ fn load_csv(csv_path: &PathBuf) -> Result<LineChartData, Box<dyn std::error::Err
         let record = result?;
 
         let fitness = record
-            .get(0)
+            .get(y_idx)
             .and_then(|s| s.parse::<f32>().ok())
             .ok_or("Invalid fitness value")?;
 
         let generation = record
-            .get(1)
+            .get(x_idx)
             .and_then(|s| s.parse::<i32>().ok())
             .ok_or("Invalid generation ID")?;
 
@@ -50,23 +54,40 @@ fn load_csv(csv_path: &PathBuf) -> Result<LineChartData, Box<dyn std::error::Err
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let csv_path = manifest_dir
+
+    // Chart 1
+    let csv_1_path = manifest_dir
         .join("data")
         .join("average_fitness_by_generation_2025-12-06T15_09_17.586384524Z.csv");
-
     // Load chart data from CSV
-    let chart_data = load_csv(&csv_path)?;
-    let chart = Chart::Line {
+    let chart_1_data = load_csv(&csv_1_path, 1, 0)?;
+    let chart_1 = Chart::Line {
         id: Uuid::now_v7(),
-        data: chart_data,
+        data: chart_1_data,
         options: Some(ChartOptions {
             animation: false,
             aspect_ratio: Some(1.7),
         }),
     };
+    // Render html
+    let chart_1_html = chart_1.render()?;
 
-    // Render chart to HTML
-    let chart_html = chart.render()?;
+    // Chart 2
+    let csv_2_path = manifest_dir
+        .join("data")
+        .join("request_convergence_by_generation_2026-01-15T07_27_21.9770471Z.csv");
+    // Load chart data from CSV
+    let chart_2_data = load_csv(&csv_2_path, 0, 3)?;
+    let chart_2 = Chart::Line {
+        id: Uuid::now_v7(),
+        data: chart_2_data,
+        options: Some(ChartOptions {
+            animation: false,
+            aspect_ratio: Some(1.7),
+        }),
+    };
+    // Render html
+    let chart_2_html = chart_2.render()?;
 
     // Create chapter with rendered chart
     let chapter = Chapter1 {
@@ -74,7 +95,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         date: chrono::NaiveDate::from_ymd_opt(2025, 12, 6).expect("Could not create date"),
         heading: "In search of predictive ability".to_string(),
         base_url: "https://example.com".to_string(),
-        chart_html,
+        chart_1_html,
+        chart_2_html,
     };
 
     // Render and save
