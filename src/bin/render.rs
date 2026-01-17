@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create chapter with rendered chart
     let chapter = Chapter1 {
         author: AUTHOR.to_string(),
-        date: chrono::NaiveDate::from_ymd_opt(2025, 12, 6).expect("Could not create date"),
+        date: chrono::NaiveDate::from_ymd_opt(2026, 01, 17).expect("Could not create date"),
         heading: "In search of predictive ability".to_string(),
         base_url: "https://example.com".to_string(),
         chart_1_html,

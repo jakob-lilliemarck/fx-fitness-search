@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     // Read the example JSON request (using new Extract format)
-    let request_json = fs::read_to_string("examples/beijing_training_request_new.json")?;
+    let request_json = fs::read_to_string("examples/beijing_training_request.json")?;
 
     println!("Invoking Beijing training binary with request:");
     println!("{}", request_json);
