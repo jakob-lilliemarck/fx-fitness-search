@@ -1,9 +1,8 @@
-use std::path::PathBuf;
-
 use askama::Template;
 use csv::ReaderBuilder;
 use fx_durable_ga_app::book::chapters::Chapter1;
 use fx_durable_ga_app::book::charts::{Chart, ChartDataset, ChartOptions, LineChartData};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 const AUTHOR: &str = "Jakob Lilliemarck";
@@ -12,6 +11,7 @@ fn load_csv(
     csv_path: &PathBuf,
     x_idx: usize,
     y_idx: usize,
+    label: &str,
 ) -> Result<LineChartData, Box<dyn std::error::Error>> {
     let mut reader = ReaderBuilder::new().has_headers(true).from_path(csv_path)?;
 
@@ -36,7 +36,7 @@ fn load_csv(
     }
 
     let fitness_dataset = ChartDataset {
-        label: "Average Fitness".into(),
+        label: label.into(),
         data,
         border_color: Some("rgb(75, 192, 192)".into()),
         tension: Some(0.1),
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .join("data")
         .join("average_fitness_by_generation_2025-12-06T15_09_17.586384524Z.csv");
     // Load chart data from CSV
-    let chart_1_data = load_csv(&csv_1_path, 1, 0)?;
+    let chart_1_data = load_csv(&csv_1_path, 1, 0, "Average fitness")?;
     let chart_1 = Chart::Line {
         id: Uuid::now_v7(),
         data: chart_1_data,
@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .join("data")
         .join("request_convergence_by_generation_2026-01-15T07_27_21.9770471Z.csv");
     // Load chart data from CSV
-    let chart_2_data = load_csv(&csv_2_path, 0, 3)?;
+    let chart_2_data = load_csv(&csv_2_path, 0, 3, "Average fitness")?;
     let chart_2 = Chart::Line {
         id: Uuid::now_v7(),
         data: chart_2_data,
@@ -89,6 +89,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Render html
     let chart_2_html = chart_2.render()?;
 
+    // Chart 3
+    // Load chart data from CSV
+    let chart_3_data = load_csv(&csv_2_path, 0, 1, "Minimum fitness")?;
+    let chart_3 = Chart::Line {
+        id: Uuid::now_v7(),
+        data: chart_3_data,
+        options: Some(ChartOptions {
+            animation: false,
+            aspect_ratio: Some(1.7),
+        }),
+    };
+    // Render html
+    let chart_3_html = chart_3.render()?;
+
     // Create chapter with rendered chart
     let chapter = Chapter1 {
         author: AUTHOR.to_string(),
@@ -97,6 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         base_url: "https://example.com".to_string(),
         chart_1_html,
         chart_2_html,
+        chart_3_html,
     };
 
     // Render and save

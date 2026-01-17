@@ -131,8 +131,8 @@
         <p>
             Even for a simple feedforward network, the morphological space is
             massive! Any approach relying on manual experimentation to search
-            such is going to be impractical at best - this is a problem that
-            calls for a structured quantitative approach.
+            such a vast space is going to be impractical at best - this is a
+            problem that calls for a structured quantitative approach.
         </p>
     </section>
 
@@ -241,7 +241,7 @@
             to those requirements we'll also need to define the number of steps,
             the resolution, along each axis. That limits the search space
             further, makes the resolution explicit and the number of
-            configuration finite.
+            configurations finite.
         </p>
         <p>
             Every valid point along an axis like
@@ -278,7 +278,7 @@
             This business of encoding and decoding may feel like jumping through
             hoops. However this transformation allows us to represent both
             integer and decimal numbers, booleans and enumerations, which
-            together allows for expressing most conceivable search spaces while
+            together allow for expressing most conceivable search spaces while
             allowing the framework to handle any gene of any search space in a
             uniform manner. Using the morphological definition, the GA framework
             can now <code>generate</code>, <code>breed</code>,
@@ -436,6 +436,68 @@
             Look at that! Average fitness is actually decreasing, at least for
             the 50 first generations or so. This time around the GA undoubtedly
             found patterns it could exploit.
+        </p>
+        <p>
+            But hold on—what does it even mean for average fitness to decrease?
+            Who cares about <i>average fitness</i>? At the end of the day,
+            average fitness is not what is going to get us a better prediction!
+            It does give us some affirmation that the GA system works, and that
+            there is some merit to the idea that two fit genotypes are more
+            likely to have fit offspring. However, in relation to the problem at
+            hand—predicting temperature one time step ahead with the lowest
+            possible loss—we're really <i>only</i> interested in the best
+            performing configurations: the minimum fitness of each generation.
+        </p>
+        {{ chart_3_html|safe }}
+        <p>
+            That's interesting—while average fitness steadily decreases, the
+            minimum fitness doesn't really change much during the optimization.
+            The slight drop in the chart trend line is so small that it's
+            essentially negligible. What are we to make of that? Here are two
+            thoughts.
+        </p>
+        <p class="conclusion">
+            The system is not actively retaining a set of elite candidates
+            throughout generations, instead sampling randomly from all evaluated
+            genotypes across the entire optimization history. Without elite
+            retention, the system may be losing and re-discovering similar
+            solutions time and time again but failing to progress from them.
+        </p>
+        <p class="conclusion">
+            The single-point crossover operation is agnostic to the logical
+            structure of gene blocks, meaning it can split blocks mid-way and
+            create configurations where toggles, selectors, and wrapped genes
+            become misaligned. This could be introducing significant noise into
+            the fitness landscape, corrupting the evolutionary signal and
+            preventing the algorithm from reliably building upon promising
+            solutions.
+        </p>
+    </section>
+    <section>
+        <h2>Looking Forward</h2>
+        <p>
+            So, did it work? Honestly, I'm not sure. The fact that average
+            fitness decreased suggests the system found something to latch
+            onto—patterns it could exploit. But the core question remains: can
+            this approach consistently improve minimum fitness across
+            generations? That's what actually matters, and right now I simply
+            don't have enough evidence to say.
+        </p>
+        <p>
+            That said, this wasn't a complete dead end. The analysis surfaced
+            two concrete improvements worth trying. First, implementing
+            <i>elite retention</i>—guaranteeing the best solutions always make
+            it into the breeding pool rather than getting randomly excluded.
+            Second, considering <i>genetic programming</i> instead of genetic
+            algorithms. GP operates on tree structures rather than flat arrays,
+            which would naturally handle the "if this feature is enabled, then
+            apply this preprocessing" logic without crossover tearing it apart.
+        </p>
+        <p>
+            If nothing else, I learned to look at minimum fitness rather than
+            averages and got a better feel for the exploration-exploitation
+            tradeoff. Whether that translates into actually solving the
+            problem—well, that's a question for another experiment.
         </p>
     </section>
 </article>

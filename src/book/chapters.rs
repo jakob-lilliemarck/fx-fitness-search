@@ -10,6 +10,7 @@ pub struct Chapter1 {
     pub base_url: String,
     pub chart_1_html: String,
     pub chart_2_html: String,
+    pub chart_3_html: String,
 }
 
 impl Chapter1 {
