@@ -1,10 +1,7 @@
-use super::phenotype::BeijingPhenotype;
+use super::BeijingGenotypeManager;
 use super::protocol::RequestVariables;
 use clap::Subcommand;
-use const_fnv1a_hash::fnv1a_hash_str_32;
-use fx_durable_ga::models::{
-    Crossover, Distribution, Encodeable, FitnessGoal, Mutagen, Schedule, Selector,
-};
+use fx_durable_ga::models::{FitnessGoal, Schedule, Selector};
 use std::sync::Arc;
 
 // Value parsers for clap (copied from client.rs)
@@ -125,33 +122,34 @@ fn parse_selector(s: &str) -> Result<Selector, String> {
     }
 }
 
-fn parse_mutagen(s: &str) -> Result<Mutagen, String> {
-    let s = s.trim();
+fn parse_mutation_rate(s: &str) -> Result<f64, String> {
+    let value = s
+        .parse::<f64>()
+        .map_err(|_| format!("Could not parse mutation_rate as f64: {}", s))?;
 
-    if let Some(inner) = s.strip_prefix("MUTAGEN(").and_then(|s| s.strip_suffix(")")) {
-        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
-        if parts.len() != 2 {
-            return Err(format!(
-                "MUTAGEN expects 2 parameters (temperature, mutation_rate), got {}",
-                parts.len()
-            ));
-        }
-
-        let temperature: f64 = parts[0]
-            .parse()
-            .map_err(|_| format!("Invalid temperature value: {}", parts[0]))?;
-        let mutation_rate: f64 = parts[1]
-            .parse()
-            .map_err(|_| format!("Invalid mutation_rate value: {}", parts[1]))?;
-
-        Mutagen::constant(temperature, mutation_rate)
-            .map_err(|e| format!("Invalid mutagen parameters: {}", e))
-    } else {
-        Err(format!(
-            "Invalid mutagen format. Expected MUTAGEN(temperature, mutation_rate), got: {}",
-            s
-        ))
+    if value > 1.0 || value < 0.0 {
+        return Err(format!(
+            "mutation rate must be a number between 0.0 and 1.0. Received {}",
+            value
+        ));
     }
+
+    return Ok(value);
+}
+
+fn parse_temperature(s: &str) -> Result<f64, String> {
+    let value = s
+        .parse::<f64>()
+        .map_err(|_| format!("Could not parse temperature as f64: {}", s))?;
+
+    if value > 1.0 || value < 0.0 {
+        return Err(format!(
+            "Temperature must be a number between 0.0 and 1.0. Received {}",
+            value
+        ));
+    }
+
+    return Ok(value);
 }
 
 #[derive(Debug, Subcommand)]
@@ -170,13 +168,13 @@ pub enum BeijingCommand {
         #[arg(long, required = true, value_parser = parse_selector)]
         selector: Selector,
 
-        /// Mutagen: MUTAGEN(temperature, mutation_rate)
-        #[arg(long, required = true, value_parser = parse_mutagen)]
-        mutagen: Mutagen,
+        /// The likeliness of any one gene mutating
+        #[arg(long, required = true, value_parser = parse_mutation_rate)]
+        mutation_rate: f64,
 
-        /// Initial population size using latin hypercube
-        #[arg(long, required = true)]
-        initial_population: u32,
+        /// The magnitude of mutation changes
+        #[arg(long, required=true, value_parser = parse_temperature)]
+        temperature: f64,
 
         /// Prediction horizon to predict values at
         #[arg(long, required = true)]
@@ -210,19 +208,19 @@ impl BeijingCommand {
                 fitness_goal,
                 schedule,
                 selector,
-                mutagen,
-                initial_population,
+                mutation_rate,
+                temperature,
                 prediction_horizon,
                 epochs,
                 patience,
                 validation_start_epoch,
                 batch_size,
             } => {
-                // Hardcode type_name from BeijingPhenotype::NAME
-                let type_name = BeijingPhenotype::NAME;
-                let type_hash: i32 = fnv1a_hash_str_32(type_name) as i32;
+                // Hardcode type_name from BeijingGenotypeManager::TYPE_NAME
+                let type_name = BeijingGenotypeManager::TYPE_NAME;
+                let type_hash: i32 = BeijingGenotypeManager::TYPE_HASH;
 
-                let request_vars = RequestVariables::with_training_params(
+                let training = RequestVariables::with_training_params(
                     prediction_horizon,
                     epochs,
                     patience,
@@ -230,16 +228,20 @@ impl BeijingCommand {
                     batch_size,
                 );
 
+                let user_defined = serde_json::json!({
+                    "mutation_rate": mutation_rate,
+                    "temperature": temperature,
+                    "training": training
+                });
+
                 svc.new_optimization_request(
-                    type_name,
+                    type_name, // FIXME - really the optimization request should only need one of type_name and type_hash, no need for both?
                     type_hash,
                     fitness_goal,
                     schedule,
                     selector,
-                    mutagen,
-                    Crossover::single_point(),
-                    Distribution::latin_hypercube(initial_population),
-                    Some(request_vars),
+                    user_defined,
+                    Option::<()>::None,
                 )
                 .await?;
 

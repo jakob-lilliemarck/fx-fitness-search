@@ -1,4 +1,4 @@
-use crate::optimizations::beijing_air_quality::{BeijingEvaluator, BeijingPhenotype};
+use crate::optimizations::beijing_air_quality::BeijingGenotypeManager;
 use sqlx::{PgPool, types::Uuid};
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinSet;
@@ -175,7 +175,7 @@ impl ServerConfig {
 
         // Determine worker count based on backend.
         let max_workers = MaxWorkers::from_env()?;
-        
+
         #[cfg(feature = "backend-ndarray")]
         let workers = {
             // For CPU backend: default to half physical cores, capped by MAX_WORKERS if set
@@ -183,7 +183,7 @@ impl ServerConfig {
             let default_workers = physical_cores / 2;
             max_workers.map_or(default_workers, |max| default_workers.min(max))
         };
-        
+
         #[cfg(not(feature = "backend-ndarray"))]
         let workers = {
             // For GPU backend: use MAX_WORKERS directly, error if not set
@@ -377,12 +377,12 @@ impl App {
         fx_durable_ga::migrations::run_default_migrations(&pool).await?;
 
         // Create the GA service and wrap it in an Arc
+        let svc_builder = fx_durable_ga::bootstrap(pool.clone()).await?;
         let svc = Arc::new(
-            fx_durable_ga::bootstrap(pool.clone())
-                .await?
-                .register::<BeijingPhenotype, _>(BeijingEvaluator::new(conf.model_save_path()))
-                .await?
-                .build(),
+            svc_builder
+                .with_genotype_manager(BeijingGenotypeManager::new(conf.model_save_path()))
+                .build()
+                .await?,
         );
 
         Ok(Self {

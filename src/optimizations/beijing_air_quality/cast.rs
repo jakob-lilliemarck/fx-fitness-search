@@ -303,6 +303,7 @@ impl Cast for BeijingCast {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Optimizable {
     Pm25,
     Pm10,
@@ -352,7 +353,13 @@ use std::sync::OnceLock;
 
 impl fmt::Display for Optimizable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
+        f.write_str(self.label())
+    }
+}
+
+impl Optimizable {
+    pub const fn label(self) -> &'static str {
+        match self {
             Optimizable::Pm25 => "PM2.5",
             Optimizable::Pm10 => "PM10",
             Optimizable::So2 => "SO2",
@@ -365,8 +372,7 @@ impl fmt::Display for Optimizable {
             Optimizable::Rain => "RAIN",
             Optimizable::Wspm => "WSPM",
             Optimizable::Wd => "wd",
-        };
-        write!(f, "{}", s)
+        }
     }
 }
 

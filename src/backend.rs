@@ -37,10 +37,10 @@ pub type Device = burn_ndarray::NdArrayDevice;
 pub fn default_device() -> Device {
     #[cfg(feature = "backend-wgpu")]
     tracing::info!("Using WGPU backend");
-    
+
     #[cfg(feature = "backend-ndarray")]
     tracing::info!("Using NdArray (CPU) backend");
-    
+
     let device = Device::default();
     tracing::info!("Device initialized: {:?}", device);
     device
