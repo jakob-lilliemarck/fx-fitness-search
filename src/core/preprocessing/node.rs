@@ -14,7 +14,6 @@ pub enum Node {
     Std(Std),
     Ema(Ema),
     ZScore(ZScore),
-    Noop,
 }
 
 impl Node {
@@ -26,7 +25,6 @@ impl Node {
             Self::Std(std) => std.process(value),
             Self::Ema(ema) => ema.process(value),
             Self::ZScore(zscore) => zscore.process(value),
-            Self::Noop => Some(value),
         }
     }
 }
