@@ -54,15 +54,17 @@ pub enum EvaluationError {
 /// This struct performs mutation, crossover, randomization etc. of the Beijing genome.
 pub struct BeijingGenotypeManager {
     model_save_path: Option<String>,
+    batch_size: usize,
 }
 
 impl BeijingGenotypeManager {
     pub const TYPE_NAME: &'static str = "beijing_air_quality";
     pub const TYPE_HASH: i32 = fnv1a_hash_str_32(Self::TYPE_NAME) as i32;
 
-    pub fn new(model_save_path: &str) -> Self {
+    pub fn new(model_save_path: &str, batch_size: usize) -> Self {
         Self {
             model_save_path: Some(model_save_path.to_string()),
+            batch_size,
         }
     }
 }
@@ -363,7 +365,7 @@ fn default_temperature() -> f64 {
 }
 
 fn default_request_variables() -> RequestVariables {
-    RequestVariables::with_training_params(1, 25, 5, 10, 100)
+    RequestVariables::with_training_params(1, 25, 5, 10)
 }
 
 fn decode_genotype(genotype: &Value) -> std::result::Result<BeijingPhenotype, EvaluationError> {
@@ -438,6 +440,7 @@ impl GenotypeManager for BeijingGenotypeManager {
         let genome = genotype.clone();
         let user_data = user_defined.clone();
         let model_save_path = self.model_save_path.clone();
+        let batch_size = self.batch_size.clone();
 
         Box::pin(async move {
             let phenotype = decode_genotype(&genome)?;
@@ -463,7 +466,7 @@ impl GenotypeManager for BeijingGenotypeManager {
                 features,
                 targets,
                 config.training.epochs,
-                config.training.batch_size,
+                batch_size,
                 phenotype.learning_rate,
             )?
             .with_patience(config.training.patience)?
@@ -478,6 +481,7 @@ impl GenotypeManager for BeijingGenotypeManager {
                 genotype_id,
                 train_config: serde_json::to_value(&train_config)?,
                 model_save_path: model_path,
+                batch_size,
             };
 
             if let Some(path) = train_request

@@ -191,10 +191,6 @@ pub enum BeijingCommand {
         /// Epoch at which to start validation
         #[arg(long, default_value = "10")]
         validation_start_epoch: usize,
-
-        /// Batch size for training and validation
-        #[arg(long, default_value = "100")]
-        batch_size: usize,
     },
 }
 
@@ -214,7 +210,6 @@ impl BeijingCommand {
                 epochs,
                 patience,
                 validation_start_epoch,
-                batch_size,
             } => {
                 // Hardcode type_name from BeijingGenotypeManager::TYPE_NAME
                 let type_name = BeijingGenotypeManager::TYPE_NAME;
@@ -225,7 +220,6 @@ impl BeijingCommand {
                     epochs,
                     patience,
                     validation_start_epoch,
-                    batch_size,
                 );
 
                 let user_defined = serde_json::json!({

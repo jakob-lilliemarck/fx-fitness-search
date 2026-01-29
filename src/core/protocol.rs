@@ -1,6 +1,5 @@
-use std::fs;
-
 use serde::{Deserialize, Serialize};
+use std::fs;
 use uuid::Uuid;
 
 /// Request sent to training binary via subprocess communication
@@ -9,6 +8,7 @@ pub struct Request {
     pub genotype_id: Uuid,
     pub train_config: serde_json::Value,
     pub model_save_path: Option<String>,
+    pub batch_size: usize,
 }
 
 impl Request {
@@ -45,7 +45,6 @@ pub struct RequestVariables {
     pub epochs: usize,
     pub patience: usize,
     pub validation_start_epoch: usize,
-    pub batch_size: usize,
 }
 
 impl RequestVariables {
@@ -56,7 +55,6 @@ impl RequestVariables {
             epochs: 25,
             patience: 5,
             validation_start_epoch: 10,
-            batch_size: 100,
         }
     }
 
@@ -66,14 +64,12 @@ impl RequestVariables {
         epochs: usize,
         patience: usize,
         validation_start_epoch: usize,
-        batch_size: usize,
     ) -> Self {
         Self {
             prediction_horizon,
             epochs,
             patience,
             validation_start_epoch,
-            batch_size,
         }
     }
 }
@@ -95,6 +91,7 @@ mod tests {
             genotype_id: Uuid::nil(),
             train_config: serde_json::json!({"hidden_size": 128}),
             model_save_path: Some("./model".to_string()),
+            batch_size: 64,
         };
 
         let json = serde_json::to_string(&original).unwrap();

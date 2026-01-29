@@ -28,6 +28,7 @@ pub struct LeaseSeconds;
 pub struct ShutdownTimeoutSeconds;
 pub struct ModelSavePath;
 pub struct MaxWorkers;
+pub struct BatchSize;
 
 impl Var for DatabaseUrl {
     const NAME: &'static str = "DATABASE_URL";
@@ -145,6 +146,24 @@ impl Var for MaxWorkers {
     }
 }
 
+impl Var for BatchSize {
+    const NAME: &str = "BATCH_SIZE";
+    type Type = usize;
+
+    fn from_env() -> Result<Self::Type, ConfigError> {
+        let val = std::env::var(Self::NAME).map_err(|err| ConfigError::Missing {
+            key: Self::NAME.to_string(),
+            message: err.to_string(),
+        })?;
+
+        val.parse::<usize>().map_err(|err| ConfigError::Invalid {
+            key: Self::NAME.to_string(),
+            value: val,
+            message: err.to_string(),
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub database_url: String,
@@ -153,6 +172,7 @@ pub struct ServerConfig {
     pub shutdown_timeout_seconds: Duration,
     pub model_save_path: String,
     pub workers: usize,
+    pub batch_size: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -172,6 +192,8 @@ impl ServerConfig {
         let shutdown_timeout_seconds = ShutdownTimeoutSeconds::from_env()?;
 
         let model_save_path = ModelSavePath::from_env()?;
+
+        let batch_size = BatchSize::from_env()?;
 
         // Determine worker count based on backend.
         let max_workers = MaxWorkers::from_env()?;
@@ -210,6 +232,7 @@ impl ServerConfig {
             shutdown_timeout_seconds,
             model_save_path,
             workers,
+            batch_size,
         })
     }
 }
@@ -326,11 +349,58 @@ pub struct App {
 
 impl App {
     pub async fn client(conf: ClientConfig) -> anyhow::Result<Self> {
-        Self::new(Conf::Client(conf)).await
+        // Create a database connection pool
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(10)
+            .connect(&conf.database_url)
+            .await?;
+
+        // Run required migrations migrations
+        fx_durable_ga::migrations::run_default_migrations(&pool).await?;
+
+        // Create the GA service and wrap it in an Arc
+        let svc = Arc::new(
+            fx_durable_ga::bootstrap(pool.clone())
+                .await?
+                .with_genotype_manager(BeijingGenotypeManager::new(&conf.model_save_path, 0))
+                .build()
+                .await?,
+        );
+
+        Ok(Self {
+            pool,
+            svc,
+            tasks: None,
+        })
     }
 
     pub async fn server(conf: ServerConfig) -> anyhow::Result<Self> {
-        let mut app = Self::new(Conf::Server(conf.clone())).await?;
+        // Create a database connection pool
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(10)
+            .connect(&conf.database_url)
+            .await?;
+
+        // Run required migrations migrations
+        fx_durable_ga::migrations::run_default_migrations(&pool).await?;
+
+        // Create the GA service and wrap it in an Arc
+        let svc = Arc::new(
+            fx_durable_ga::bootstrap(pool.clone())
+                .await?
+                .with_genotype_manager(BeijingGenotypeManager::new(
+                    &conf.model_save_path,
+                    conf.batch_size,
+                ))
+                .build()
+                .await?,
+        );
+
+        let mut app = Self {
+            pool,
+            svc,
+            tasks: None,
+        };
 
         // --- Event listener setup ---
         let mut registry = fx_event_bus::EventHandlerRegistry::new();
@@ -362,34 +432,6 @@ impl App {
 
     pub fn get_svc(&self) -> Arc<fx_durable_ga::optimization::Service> {
         self.svc.clone()
-    }
-
-    async fn new(conf: Conf) -> anyhow::Result<Self> {
-        let database_url = conf.database_url();
-
-        // Create a database connection pool
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(10)
-            .connect(database_url)
-            .await?;
-
-        // Run required migrations migrations
-        fx_durable_ga::migrations::run_default_migrations(&pool).await?;
-
-        // Create the GA service and wrap it in an Arc
-        let svc_builder = fx_durable_ga::bootstrap(pool.clone()).await?;
-        let svc = Arc::new(
-            svc_builder
-                .with_genotype_manager(BeijingGenotypeManager::new(conf.model_save_path()))
-                .build()
-                .await?,
-        );
-
-        Ok(Self {
-            pool,
-            svc,
-            tasks: None,
-        })
     }
 
     pub async fn stop(self) {
