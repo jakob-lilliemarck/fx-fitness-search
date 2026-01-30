@@ -7,8 +7,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
-      POSTGRES_DB: ga
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?error}
+      POSTGRES_DB: ga_2
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -31,7 +31,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-dev}@postgres:5432/ga
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?error}@postgres:5432/ga_2
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -61,7 +61,7 @@ services:
       MB_DB_HOST: postgres
       MB_DB_PORT: 5432
       MB_DB_USER: postgres
-      MB_DB_PASS: ${POSTGRES_PASSWORD:-dev}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:?error}
     ports:
       - "3000:3000"
     networks:
@@ -97,14 +97,6 @@ services:
 networks:
   default:
     driver: bridge
-# Try this later:
-# networks:
-#   default:
-#     driver: bridge
-#     ipam:
-#       config:
-#         - subnet: 172.18.0.0/16
-#           gateway: 172.18.0.1
 
 volumes:
   postgres_data:

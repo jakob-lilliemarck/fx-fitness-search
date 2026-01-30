@@ -33,7 +33,7 @@ const FEATURE_SOURCES: [Optimizable; 12] = [
 ];
 const INTERPOLATION_WINDOWS: [usize; 3] = [1, 4, 16];
 const NODE_WINDOWS: [usize; 7] = [2, 4, 8, 16, 32, 64, 128];
-const HIDDEN_SIZES: [usize; 3] = [16, 32, 64];
+const HIDDEN_SIZES: [usize; 4] = [16, 32, 64, 128];
 const LEARNING_RATES: [f64; 5] = [1e-4, 4e-4, 7e-4, 1e-3, 2e-3];
 const SEQUENCE_LENGTHS: [usize; 10] = [12, 24, 36, 48, 60, 72, 84, 96, 108, 120];
 const MIN_FEATURES: usize = 1;
