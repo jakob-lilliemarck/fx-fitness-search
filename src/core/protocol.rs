@@ -80,9 +80,10 @@ mod tests {
 
     #[test]
     fn test_request_from_json_str() {
-        let json = r#"{"genotype_id":"550e8400-e29b-41d4-a716-446655440000","train_config":{},"model_save_path":null}"#;
+        let json = r#"{"genotype_id":"550e8400-e29b-41d4-a716-446655440000","train_config":{},"model_save_path":null,"batch_size":32}"#;
         let req = Request::from_json_str(json).unwrap();
         assert_eq!(req.model_save_path, None);
+        assert_eq!(req.batch_size, 32);
     }
 
     #[test]

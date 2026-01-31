@@ -178,6 +178,7 @@ pub struct ServerConfig {
 #[derive(Clone, Debug)]
 pub struct ClientConfig {
     pub database_url: String,
+    pub host_id: Uuid,
     pub model_save_path: String,
 }
 
@@ -240,6 +241,7 @@ impl ServerConfig {
 impl ClientConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         let database_url = DatabaseUrl::from_env()?;
+        let host_id = HostId::from_env()?;
         let model_save_path = ModelSavePath::from_env()?;
 
         tracing::info!(
@@ -250,6 +252,7 @@ impl ClientConfig {
 
         Ok(ClientConfig {
             database_url,
+            host_id,
             model_save_path,
         })
     }
@@ -360,7 +363,7 @@ impl App {
 
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(
-            fx_durable_ga::bootstrap(pool.clone())
+            fx_durable_ga::bootstrap(conf.host_id, pool.clone())
                 .await?
                 .with_genotype_manager(BeijingGenotypeManager::new(&conf.model_save_path, 0))
                 .build()
@@ -386,7 +389,7 @@ impl App {
 
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(
-            fx_durable_ga::bootstrap(pool.clone())
+            fx_durable_ga::bootstrap(conf.host_id, pool.clone())
                 .await?
                 .with_genotype_manager(BeijingGenotypeManager::new(
                     &conf.model_save_path,

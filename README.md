@@ -113,6 +113,7 @@ target/release/client beijing request-optimization \
 ```
 
 ```bash
+# 2026-01-29
 target/release/client beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
   --schedule 'GENERATIONAL(100, 48)' \
@@ -124,6 +125,20 @@ target/release/client beijing request-optimization \
   --patience 3 \
   --validation-start-epoch 5
 ```
+
+```bash
+target/release/client beijing request-optimization \
+  --fitness-goal 'MIN(0.0)' \
+  --schedule 'GENERATIONAL(100, 100)' \
+  --selector 'TOURNAMENT(5, 200)' \
+  --mutation-rate 0.2 \
+  --temperature 0.5 \
+  --prediction-horizon 1 \
+  --epochs 40 \
+  --patience 5 \
+  --validation-start-epoch 5
+```
+
 ### Data Sources
 
 - **Beijing Multi-Site Air Quality**: Chen, S. (2017). [Dataset]. UCI Machine Learning Repository.

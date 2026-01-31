@@ -87,36 +87,26 @@ fn parse_selector(s: &str) -> Result<Selector, String> {
         .strip_prefix("TOURNAMENT(")
         .and_then(|s| s.strip_suffix(")"))
     {
-        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
-        if parts.len() != 2 {
-            return Err(format!(
-                "TOURNAMENT expects 2 parameters (tournament_size, sample_size), got {}",
-                parts.len()
-            ));
-        }
+        let tournament_size: usize = inner
+            .trim()
+            .parse()
+            .map_err(|_| format!("Invalid tournament_size value: {}", inner))?;
 
-        let tournament_size: usize = parts[0]
-            .parse()
-            .map_err(|_| format!("Invalid tournament_size value: {}", parts[0]))?;
-        let sample_size: usize = parts[1]
-            .parse()
-            .map_err(|_| format!("Invalid sample_size value: {}", parts[1]))?;
-        let selector: Selector =
-            Selector::tournament(tournament_size, sample_size).map_err(|err| err.to_string())?;
+        let selector = Selector::tournament(tournament_size);
+
         Ok(selector)
     } else if let Some(inner) = s
         .strip_prefix("ROULETTE(")
         .and_then(|s| s.strip_suffix(")"))
     {
-        let sample_size: usize = inner
-            .trim()
-            .parse()
-            .map_err(|_| format!("Invalid sample_size value: {}", inner))?;
+        if !inner.trim().is_empty() {
+            return Err("ROULETTE does not takes any parameters".to_string());
+        }
 
-        Ok(Selector::roulette(sample_size))
+        Ok(Selector::roulette())
     } else {
         Err(format!(
-            "Invalid selector format. Expected TOURNAMENT(tournament_size, sample_size) or ROULETTE(sample_size), got: {}",
+            "Invalid selector format. Expected TOURNAMENT(tournament_size) or ROULETTE(), got: {}",
             s
         ))
     }
@@ -164,7 +154,7 @@ pub enum BeijingCommand {
         #[arg(long, required = true, value_parser = parse_schedule)]
         schedule: Schedule,
 
-        /// Selector: TOURNAMENT(tournament_size, sample_size) or ROULETTE(sample_size)
+        /// Selector: TOURNAMENT(tournament_size) or ROULETTE()
         #[arg(long, required = true, value_parser = parse_selector)]
         selector: Selector,
 
