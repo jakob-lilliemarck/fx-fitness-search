@@ -346,7 +346,7 @@ impl Tasks {
 
 pub struct App {
     pool: PgPool,
-    svc: Arc<fx_durable_ga::optimization::Service>,
+    svc: Arc<fx_durable_ga::services::optimization::Service>,
     tasks: Option<Tasks>,
 }
 
@@ -363,11 +363,10 @@ impl App {
 
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(
-            fx_durable_ga::bootstrap(conf.host_id, pool.clone())
+            fx_durable_ga::bootstrap::bootstrap(conf.host_id, pool.clone())
                 .await?
                 .with_genotype_manager(BeijingGenotypeManager::new(&conf.model_save_path, 0))
-                .build()
-                .await?,
+                .build(),
         );
 
         Ok(Self {
@@ -389,14 +388,13 @@ impl App {
 
         // Create the GA service and wrap it in an Arc
         let svc = Arc::new(
-            fx_durable_ga::bootstrap(conf.host_id, pool.clone())
+            fx_durable_ga::bootstrap::bootstrap(conf.host_id, pool.clone())
                 .await?
                 .with_genotype_manager(BeijingGenotypeManager::new(
                     &conf.model_save_path,
                     conf.batch_size,
                 ))
-                .build()
-                .await?,
+                .build(),
         );
 
         let mut app = Self {
@@ -407,7 +405,7 @@ impl App {
 
         // --- Event listener setup ---
         let mut registry = fx_event_bus::EventHandlerRegistry::new();
-        fx_durable_ga::register_event_handlers(
+        fx_durable_ga::services::optimization::register_event_handlers(
             std::sync::Arc::new(fx_mq_jobs::Queries::new(fx_mq_jobs::FX_MQ_JOBS_SCHEMA_NAME)),
             app.svc.clone(),
             &mut registry,
@@ -417,7 +415,10 @@ impl App {
         // --- Job listener setup ---
         let jobs_listener = fx_mq_jobs::Listener::new(
             app.pool.clone(),
-            fx_durable_ga::register_job_handlers(&app.svc, fx_mq_jobs::RegistryBuilder::new()),
+            fx_durable_ga::services::optimization::register_job_handlers(
+                &app.svc,
+                fx_mq_jobs::RegistryBuilder::new(),
+            ),
             conf.workers,
             conf.host_id,
             conf.lease_seconds,
@@ -433,7 +434,7 @@ impl App {
         Ok(app)
     }
 
-    pub fn get_svc(&self) -> Arc<fx_durable_ga::optimization::Service> {
+    pub fn get_svc(&self) -> Arc<fx_durable_ga::services::optimization::Service> {
         self.svc.clone()
     }
 

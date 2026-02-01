@@ -129,10 +129,10 @@ target/release/client beijing request-optimization \
 ```bash
 target/release/client beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(100, 100)' \
-  --selector 'TOURNAMENT(5, 200)' \
-  --mutation-rate 0.2 \
-  --temperature 0.5 \
+  --schedule 'GENERATIONAL(200, 30)' \
+  --selector 'TOURNAMENT(2)' \
+  --mutation-rate 0.15 \
+  --temperature 0.25 \
   --prediction-horizon 1 \
   --epochs 40 \
   --patience 5 \

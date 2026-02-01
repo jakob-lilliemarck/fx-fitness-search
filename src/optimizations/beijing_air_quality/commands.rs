@@ -187,7 +187,7 @@ pub enum BeijingCommand {
 impl BeijingCommand {
     pub async fn execute(
         self,
-        svc: Arc<fx_durable_ga::optimization::Service>,
+        svc: Arc<fx_durable_ga::services::optimization::Service>,
     ) -> anyhow::Result<()> {
         match self {
             Self::RequestOptimization {
