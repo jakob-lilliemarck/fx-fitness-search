@@ -256,14 +256,12 @@ impl BeijingPhenotype {
 struct MutationParams {
     mutation_rate: f64,
     temperature: f64,
-    progress: f64,
 }
 
 impl MutationParams {
     fn effective_rate(&self) -> f64 {
-        let cooling = (1.0 - self.progress).clamp(0.0, 1.0);
         let temp = self.temperature.clamp(0.0, 1.0);
-        (self.mutation_rate * (0.5 + 0.5 * temp) * (0.25 + 0.75 * cooling)).clamp(0.01, 0.99)
+        (self.mutation_rate * (0.5 + 0.5 * temp)).clamp(0.01, 0.99)
     }
 }
 
@@ -401,7 +399,6 @@ impl GenotypeManager for BeijingGenotypeManager {
         &self,
         genotype: &mut Value,
         rng: &mut dyn RngCore,
-        progress: f64,
         user_defined: &Value,
     ) -> AnyhowResult<()> {
         let mut phenotype = decode_genotype(genotype)?;
@@ -410,7 +407,6 @@ impl GenotypeManager for BeijingGenotypeManager {
         let params = MutationParams {
             mutation_rate: config.mutation_rate,
             temperature: config.temperature,
-            progress,
         };
 
         phenotype.mutate(rng, params);
