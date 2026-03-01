@@ -46,10 +46,15 @@ async fn main() -> anyhow::Result<()> {
 
     match args.command {
         Command::Beijing(cmd) => {
-            cmd.execute(client.get_svc()).await?;
+            cmd.execute(client.ga()).await?;
         }
         Command::Interrupt { request_id } => {
-            client.get_svc().interrupt_request(request_id).await?;
+            client
+                .ga()
+                .services()
+                .optimization()
+                .request_interrupt(request_id)
+                .await?;
             tracing::info!("Interrupted optimization request: {}", request_id);
         }
     }

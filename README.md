@@ -1,158 +1,85 @@
 # fx-durable-ga-app
 
-Distributed genetic algorithm optimization for timeseries neural network training.
+Distributed genetic algorithm optimization for time series model training, with optional embedding-based indexing of genotypes.
 
-## Architecture
+## Prerequisites
+- PostgreSQL
+- Environment variables (see below)
 
-- **Client**: Submit optimization requests and query results
-- **Server**: Worker pool that picks up jobs and evaluates phenotypes
-- **Database**: PostgreSQL stores genotypes, phenotypes, and fitness scores
+## Environment Configuration
 
-## Setup
-Clone the repo and install or compile it yourself, or download one of the precompiled release binaries from
+Example `client` variables:
 
-https://github.com/jakob-lilliemarck/fx-fitness-search/releases
-
-### Prerequisites
-- PostgreSQL database
-- Environment variable configurations
-
-### Environment Configuration
-#### Example `client` variables:
 ```
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/ga?options=-c%20search_path%3Dfx_mq_jobs%2Cfx_event_bus%2Cfx_durable_ga
-MODEL_SAVE_PATH=/some/absolute/path
+MODEL_SAVE_PATH=/absolute/path/for/models
 ```
 
-#### Example `server` variables:
+Example `server` variables:
+
 ```
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/ga?options=-c%20search_path%3Dfx_mq_jobs%2Cfx_event_bus%2Cfx_durable_ga
-MODEL_SAVE_PATH=/some/absolute/path
+MODEL_SAVE_PATH=/absolute/path/for/models
 HOST_ID=00000000-0000-0000-0000-000000000001
 LEASE_SECONDS=450
 SHUTDOWN_TIMEOUT_SECONDS=5
 MAX_WORKERS=4
+BATCH_SIZE=128
 ```
 
-### Migrate
-The migrate binary ensures all migrations are run on the database. You can run it manually, or it will run on server startup or at the first CLI command.
-```bash
-target/release/migrate
+## Build
+
+Default (WGPU backend, GPU-accelerated with CPU fallback):
+
 ```
-
-## Building
-
-### Backend Selection
-
-This project supports multiple Burn backends for neural network training, selectable at compile time.
-
-**Default (WGPU - GPU Accelerated):**
-```bash
-cargo build --release
-# Or explicitly:
 cargo build --release --all
 ```
-Uses WGPU backend for GPU acceleration via Vulkan/Metal/DirectX. Automatically falls back to CPU if no GPU is available.
 
-**CPU Only (NdArray):**
-```bash
+CPU-only (ndarray backend):
+
+```
 cargo build --release --no-default-features --features backend-ndarray
 ```
-Uses NdArray backend for CPU-only training.
 
-**Requirements for GPU (WGPU) on Linux:**
-- NVIDIA: `sudo pacman -S nvidia nvidia-utils vulkan-icd-loader`
-- AMD: `sudo pacman -S mesa vulkan-radeon vulkan-icd-loader`
-- Intel: `sudo pacman -S mesa vulkan-intel vulkan-icd-loader`
+## Run
 
-Verify GPU support: `vulkaninfo --summary`
+Start server:
 
-See [docs/BACKENDS.md](docs/BACKENDS.md) for detailed backend documentation.
-
-## Usage
-Usage examples assume the binaries were compiled locally and run from the directory root.
-
-### 1. Start the Server
-
-```bash
+```
 target/release/server
 ```
 
-The server will start workers that process optimization jobs.
+Submit a small optimization request (current CLI syntax):
 
-### 2. Submit an Optimization Request
-
-#### Beijing Air Quality Optimization
-
-```bash
-target/release/client beijing request-optimization \
-  --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(100, 12)' \
-  --selector 'TOURNAMENT(3, 12)' \
-  --mutagen 'MUTAGEN(0.7, 0.4)' \
-  --initial-population 50 \
-  --prediction-horizon 1 \
-  --epochs 20 \
-  --patience 3 \
-  --validation-start-epoch 5 \
-  --batch-size 128
 ```
-
-```bash
 target/release/client beijing request-optimization \
   --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(100, 48)' \
-  --selector 'TOURNAMENT(5, 400)' \
-  --mutagen 'MUTAGEN(0.3, 0.15)' \
-  --initial-population 200 \
-  --prediction-horizon 1 \
-  --epochs 30 \
-  --patience 3 \
-  --validation-start-epoch 5 \
-  --batch-size 128
-```
-
-```bash
-# 2026-01-29
-target/release/client beijing request-optimization \
-  --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(100, 48)' \
-  --selector 'TOURNAMENT(5, 400)' \
-  --mutation-rate 0.15 \
-  --temperature 0.3 \
-  --prediction-horizon 1 \
-  --epochs 30 \
-  --patience 3 \
-  --validation-start-epoch 5
-```
-
-```bash
-target/release/client beijing request-optimization \
-  --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(200, 30)' \
+  --schedule 'GENERATIONAL(20, 8)' \
   --selector 'TOURNAMENT(2)' \
-  --mutation-rate 0.15 \
+  --mutation-rate 0.1 \
   --temperature 0.25 \
   --prediction-horizon 1 \
-  --epochs 40 \
-  --patience 5 \
-  --validation-start-epoch 5
+  --epochs 8 \
+  --patience 3 \
+  --validation-start-epoch 3
 ```
 
-```bash
-target/release/client beijing request-optimization \
-  --fitness-goal 'MIN(0.0)' \
-  --schedule 'GENERATIONAL(200, 45)' \
-  --selector 'TOURNAMENT(3)' \
-  --mutation-rate 0.18 \
-  --temperature 0.30 \
-  --prediction-horizon 1 \
-  --epochs 40 \
-  --patience 5 \
-  --validation-start-epoch 5
-```
-### Data Sources
+## Embedding Sanity Checks (High-Level)
 
-- **Beijing Multi-Site Air Quality**: Chen, S. (2017). [Dataset]. UCI Machine Learning Repository.
-  DOI: [10.24432/C5RK5G](https://doi.org/10.24432/C5RK5G) |
-  License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+When indexing is enabled, each evaluated genotype should have an embedding. You can sanity-check quality with three simple checks:
+
+1) Coverage
+- For a recent request, verify that all evaluated genotypes have corresponding embeddings.
+
+2) Structure vs random
+- Compare nearest-neighbor distances to a random baseline. Nearest neighbors should be significantly closer than random pairs.
+
+3) Semantic consistency
+- Compare genome JSON for nearest vs farthest neighbors. Nearest neighbors should share similar feature pipelines; farthest should be structurally different.
+
+These checks do not require code changes and can be done directly in the database using the embedding tags (e.g., `genotype_id:*`).
+
+## Data Source
+
+- Beijing Multi-Site Air Quality: Chen, S. (2017). UCI ML Repository.
+  DOI: 10.24432/C5RK5G (CC BY 4.0)

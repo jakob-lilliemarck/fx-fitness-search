@@ -1,8 +1,7 @@
-use super::BeijingGenotypeManager;
+use super::BeijingPhenotype;
 use super::protocol::RequestVariables;
 use clap::Subcommand;
 use fx_durable_ga::models::{FitnessGoal, Schedule, Selector};
-use std::sync::Arc;
 
 // Value parsers for clap (copied from client.rs)
 
@@ -187,7 +186,7 @@ pub enum BeijingCommand {
 impl BeijingCommand {
     pub async fn execute(
         self,
-        svc: Arc<fx_durable_ga::services::optimization::Service>,
+        ga: std::sync::Arc<fx_durable_ga::bootstrap::App>,
     ) -> anyhow::Result<()> {
         match self {
             Self::RequestOptimization {
@@ -201,9 +200,8 @@ impl BeijingCommand {
                 patience,
                 validation_start_epoch,
             } => {
-                // Hardcode type_name from BeijingGenotypeManager::TYPE_NAME
-                let type_name = BeijingGenotypeManager::TYPE_NAME;
-                let type_hash: i32 = BeijingGenotypeManager::TYPE_HASH;
+                let type_name = BeijingPhenotype::TYPE_NAME;
+                let type_hash: i32 = BeijingPhenotype::TYPE_HASH;
 
                 let training = RequestVariables::with_training_params(
                     prediction_horizon,
@@ -218,16 +216,18 @@ impl BeijingCommand {
                     "training": training
                 });
 
-                svc.new_optimization_request(
-                    type_name, // FIXME - really the optimization request should only need one of type_name and type_hash, no need for both?
-                    type_hash,
-                    fitness_goal,
-                    schedule,
-                    selector,
-                    user_defined,
-                    Option::<()>::None,
-                )
-                .await?;
+                ga.services()
+                    .optimization()
+                    .request_new(
+                        type_name, // FIXME - really the optimization request should only need one of type_name and type_hash, no need for both?
+                        type_hash,
+                        fitness_goal,
+                        schedule,
+                        selector,
+                        user_defined,
+                        Option::<()>::None,
+                    )
+                    .await?;
 
                 tracing::info!("Started optimization request for Beijing air quality");
                 Ok(())

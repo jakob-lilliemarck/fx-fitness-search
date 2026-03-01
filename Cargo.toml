@@ -26,9 +26,9 @@ sqlx = { version = "0.8", default-features = false, features = [
 anyhow = "1.0.95"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
-fx-durable-ga = { git = "https://github.com/jakob-lilliemarck/fx-durable-ga.git", branch = "feat/genetic-programming" }
-fx-mq-jobs = "0.1.8"
-fx-event-bus = "0.1.7"
+fx-durable-ga = { git = "https://github.com/jakob-lilliemarck/fx-durable-ga.git", branch = "feat/with_indexer_registry" }
+fx-mq-jobs = "~0.1.10"
+fx-event-bus = "~0.1.13"
 num_cpus = "1.17.0"
 futures = "0.3.31"
 clap = { version = "4.5", features = ["derive"] }
