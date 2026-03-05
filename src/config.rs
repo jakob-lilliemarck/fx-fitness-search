@@ -29,6 +29,8 @@ pub struct ShutdownTimeoutSeconds;
 pub struct ModelSavePath;
 pub struct MaxWorkers;
 pub struct BatchSize;
+pub struct HttpAddr;
+pub struct ApiBaseUrl;
 
 impl Var for DatabaseUrl {
     const NAME: &'static str = "DATABASE_URL";
@@ -164,6 +166,38 @@ impl Var for BatchSize {
     }
 }
 
+impl Var for HttpAddr {
+    const NAME: &str = "HTTP_ADDR";
+    type Type = std::net::SocketAddr;
+
+    fn from_env() -> Result<Self::Type, ConfigError> {
+        let val = std::env::var(Self::NAME).map_err(|err| ConfigError::Missing {
+            key: Self::NAME.to_string(),
+            message: err.to_string(),
+        })?;
+
+        val.parse::<std::net::SocketAddr>().map_err(|err| ConfigError::Invalid {
+            key: Self::NAME.to_string(),
+            value: val,
+            message: err.to_string(),
+        })
+    }
+}
+
+impl Var for ApiBaseUrl {
+    const NAME: &str = "API_BASE_URL";
+    type Type = String;
+
+    fn from_env() -> Result<Self::Type, ConfigError> {
+        let val = std::env::var(Self::NAME).map_err(|err| ConfigError::Missing {
+            key: Self::NAME.to_string(),
+            message: err.to_string(),
+        })?;
+
+        Ok(val)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub database_url: String,
@@ -173,6 +207,7 @@ pub struct ServerConfig {
     pub model_save_path: String,
     pub workers: usize,
     pub batch_size: usize,
+    pub http_addr: std::net::SocketAddr,
 }
 
 #[derive(Clone, Debug)]
@@ -180,6 +215,7 @@ pub struct ClientConfig {
     pub database_url: String,
     pub host_id: Uuid,
     pub model_save_path: String,
+    pub api_base_url: String,
 }
 
 impl ServerConfig {
@@ -195,6 +231,7 @@ impl ServerConfig {
         let model_save_path = ModelSavePath::from_env()?;
 
         let batch_size = BatchSize::from_env()?;
+        let http_addr = HttpAddr::from_env()?;
 
         // Determine worker count based on backend.
         let max_workers = MaxWorkers::from_env()?;
@@ -234,6 +271,7 @@ impl ServerConfig {
             model_save_path,
             workers,
             batch_size,
+            http_addr,
         })
     }
 }
@@ -243,6 +281,7 @@ impl ClientConfig {
         let database_url = DatabaseUrl::from_env()?;
         let host_id = HostId::from_env()?;
         let model_save_path = ModelSavePath::from_env()?;
+        let api_base_url = ApiBaseUrl::from_env()?;
 
         tracing::info!(
             message = "Configuration loaded",
@@ -254,6 +293,7 @@ impl ClientConfig {
             database_url,
             host_id,
             model_save_path,
+            api_base_url,
         })
     }
 }
@@ -427,6 +467,14 @@ impl App {
                 .with_service(new_beijing_service(&conf.model_save_path, conf.batch_size))?
                 .build()?,
         );
+
+        let http_addr = conf.http_addr;
+        let ga_http = ga.clone();
+        tokio::spawn(async move {
+            if let Err(err) = ga_http.serve_http(http_addr).await {
+                tracing::error!(message = "http server failed", error = ?err);
+            }
+        });
 
         // Run required migrations migrations
         fx_durable_ga::migrations::run_default_migrations(&pool).await?;

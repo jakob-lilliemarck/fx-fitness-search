@@ -3,3 +3,4 @@
 model_files
 docker/*.sh
 .sr
+db_dumps
