@@ -48,13 +48,20 @@ impl foreign_service::Optimizer for BeijingOptimizer {
         Ok(BeijingPhenotype::random(&mut rng))
     }
 
-    fn mutate(&self, instance: &mut Self::Type, user_defined: &Value) -> AnyhowResult<()> {
+    fn mutate(
+        &self,
+        instance: &mut Self::Type,
+        user_defined: &serde_json::Value,
+    ) -> AnyhowResult<()> {
         let config = decode_user_defined(user_defined)?;
+
         let params = MutationParams {
             mutation_rate: config.mutation_rate,
             temperature: config.temperature,
         };
+
         let mut rng = rand::rng();
+
         instance.mutate(&mut rng, params);
         Ok(())
     }

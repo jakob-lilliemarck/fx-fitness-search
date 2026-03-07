@@ -176,11 +176,12 @@ impl Var for HttpAddr {
             message: err.to_string(),
         })?;
 
-        val.parse::<std::net::SocketAddr>().map_err(|err| ConfigError::Invalid {
-            key: Self::NAME.to_string(),
-            value: val,
-            message: err.to_string(),
-        })
+        val.parse::<std::net::SocketAddr>()
+            .map_err(|err| ConfigError::Invalid {
+                key: Self::NAME.to_string(),
+                value: val,
+                message: err.to_string(),
+            })
     }
 }
 
@@ -471,6 +472,9 @@ impl App {
         let http_addr = conf.http_addr;
         let ga_http = ga.clone();
         tokio::spawn(async move {
+            tracing::info!("swagger docs: http://{}/docs", http_addr);
+            tracing::info!("lineage page: http://{}/lineage", http_addr);
+
             if let Err(err) = ga_http.serve_http(http_addr).await {
                 tracing::error!(message = "http server failed", error = ?err);
             }
@@ -484,7 +488,6 @@ impl App {
             ga,
             tasks: None,
         };
-        let mq = std::sync::Arc::new(fx_mq_jobs::Queries::new(fx_mq_jobs::FX_MQ_JOBS_SCHEMA_NAME));
 
         // --- Event listener setup ---
         let mut registry = fx_event_bus::EventHandlerRegistry::new();
@@ -494,7 +497,8 @@ impl App {
         // --- Job listener setup ---
         let jobs_listener = fx_mq_jobs::Listener::new(
             app.pool.clone(),
-            app.ga.register_job_handler(fx_mq_jobs::RegistryBuilder::new()),
+            app.ga
+                .register_job_handler(fx_mq_jobs::RegistryBuilder::new()),
             conf.workers,
             conf.host_id,
             conf.lease_seconds,

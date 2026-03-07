@@ -2,13 +2,13 @@ use super::ingest;
 use super::phenotype::BeijingPhenotype;
 use crate::core::ingestion::Extract;
 use fx_durable_ga::models::{EncodeInput, TypeName};
+use fx_durable_ga::services::indexing::TrainModelConfig;
 use fx_durable_ga::services::indexing::encoder::dataset::{
     SequenceDataSource, SequenceDataset, SequenceSample,
 };
 use fx_durable_ga::services::indexing::encoder::train::AutoencoderTrainConfig;
-use fx_durable_ga::services::indexing::TrainModelConfig;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 use std::sync::{Arc, OnceLock};
 use tokio::runtime::Handle;
 use tokio::task::block_in_place;

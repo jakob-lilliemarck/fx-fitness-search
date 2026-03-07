@@ -58,10 +58,6 @@ name = "migrate"
 path = "src/bin/migrate.rs"
 
 [[bin]]
-name = "client"
-path = "src/bin/client.rs"
-
-[[bin]]
 name = "server"
 path = "src/bin/server.rs"
 
